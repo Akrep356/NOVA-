@@ -1,6 +1,4 @@
-import
-  org.gradle.api.initialization.resolve.R
-epositoriesMode
+
 pluginManagement {
   repositories {
     google()
