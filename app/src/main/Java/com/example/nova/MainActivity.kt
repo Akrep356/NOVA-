@@ -15,7 +15,10 @@ onCreate(savedInstanceState: Bundle?)
 super.onCreate(savedInstanceState)
 
         setContent {
-            Text(text = "NOVA")
+            Text(
+                text = "NOVA\nAI Müzik
+Video & Sanatçı Yarat"
+            )
         }
 
   }
