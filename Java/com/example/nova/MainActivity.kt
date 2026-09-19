@@ -60,9 +60,9 @@ Gravity.CENTER
 
 LinearLayout.LayoutParams.MATCH_PARENT
 ' 
-                40
-            )
-       )
+        40   
+    )
+ )
 
       layout.addView(button)
 
