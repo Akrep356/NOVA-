@@ -11,8 +11,8 @@ import android.widget.TextView
 class MainActivity : Activity() {
 
     override fun
-onCreate(savenInstanceState: Bundle?)
-  {
+onCreate(savenInstanceState: Bundle?)  
+    {    
 super.onCreata(savedInstanceState)
 
         val layout =
