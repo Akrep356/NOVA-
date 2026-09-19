@@ -34,8 +34,8 @@ title.setTextColor(Color.WHITE)
         title.gravity = Gravity.CENTER
 
         val subtitle = TextView(this)
-        subtitle.text = "AI Müzik 
-Video & Sanatçı Yarat"
+        subtitle.text = "AI Müzik Video & 
+        Sanatçı Yarat"
         subtitle.textSize = 18f
 
 subtitle.setTextColor(Color.LTGRAY)
@@ -46,8 +46,7 @@ Gravity.CENTER
         button.text = "NOVA'YI BAŞLAT"
 
         button.setOnClickListener {
-            subtitle.text = "NOVA 
-hazır! 🎧"
+            subtitle.text = "NOVA hazır! 🎧"
         }
 
         layout.addView(title)
