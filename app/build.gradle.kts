@@ -23,4 +23,4 @@ implementation("androidx.core:core-ktx
 
 implementation("androidx.appcompat:app
 compat:1.7.0")
-               }
+}
