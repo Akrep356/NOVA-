@@ -4,7 +4,7 @@ xmlns:android="http://schemas.android.
 com/apk/res/android">
 
     <application
-        aondroid:label="NOVA"
+        android:label="NOVA"
         android:allowBackkup="true"
         android:supportsRtl="true">
 
