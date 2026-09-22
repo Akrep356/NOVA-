@@ -20,8 +20,8 @@ android:name=".MainActivity"
                 
                 <action
                     
-android:name="android.intent.action.MA
-IN" />
+android:name="android.intent.action.
+MAIN" />
                 
                 <category
                     
