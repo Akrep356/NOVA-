@@ -5,20 +5,23 @@ com/apk/res/android">
 
     <application
         android:label="NOVA"
-        android:allowBackkup="true"
+        android:allowBackup="true"
         android:supportsRtl="true">
 
         <activity
+
 android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
 
                 <action
-android:name="android.intent.action
+
+android:name="android.intent.action.
 MAIN" />
 
                 <category
+
 android:name="android.intent.category.
 LAUNCHER" />
 
