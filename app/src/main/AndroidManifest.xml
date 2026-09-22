@@ -6,7 +6,7 @@ com/apk/res/android">
     <application
         android:allowBackup="true"
         android:label="NOVA"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
 
 android:theme="@style/Theme.AppCompat.
 Light.NoActionBar">
