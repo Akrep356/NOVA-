@@ -8,8 +8,8 @@ com/apk/res/android">
         android:label="NOVA"
         android:supportsRtl="true"
 
-android:theme="@style/Theme.AppCompat.
-Light.NoActionBar">
+android:theme="@android:style/Theme.
+Material.Light.NoActiovBar">
 
         <activity
 
@@ -17,19 +17,19 @@ android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
-                
+
                 <action
-                    
+
 android:name="android.intent.action.
 MAIN" />
                 
                 <category
-                    
+
 android:name="android.intent.category.
 LAUNCHER" />
                 
             </intent-filter>
-            
+
         </activity>
 
     </application>
