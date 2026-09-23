@@ -14,8 +14,9 @@ android:theme="@android:style/Theme
 
         <activity
 
-android:name=".MainActivity"
-            android:exported="true">
+android:name="com.example.nova.MainAct
+iviy"
+            android:exported="true"
 
             <intent-filter>
 
