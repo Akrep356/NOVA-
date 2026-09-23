@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest
+    
 xmlns:android="http://schemas.android
 .com/apk/res/android">
 
@@ -16,7 +17,7 @@ android:theme="@android:style/Theme
 
 android:name="com.example.nova.MainAct
 iviy"
-            android:exported="true"
+            android:exported="true">
 
             <intent-filter>
 
@@ -25,6 +26,7 @@ android:name="android.intent.action.MA
 IN" />
 
                 <category
+                    
 android:name="android.intent.category.
 LAUNCHER" />
 
