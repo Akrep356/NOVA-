@@ -13,9 +13,9 @@ android:theme="@android:style/Theme
 
         <activity
 
-android:name="MainActivity"
+android:name=".MainActivity"
             android:exported="true">
-
+\u003Capplication
             <intent-filter>
 
                 <action
