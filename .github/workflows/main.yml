@@ -24,21 +24,15 @@ jops:
           java-version: '17'
 
       - name: Set up Gradle
-        uses:
-gradle/actions/setup-gradle@v4
+        uses:gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Build APK
         run: gradle assembleDebug
 
-      - name: Find APK
-        run: |
-          echo "APK DOSYALARI:"
-          find . -type f -name "*.apk"
--print
-
       - name: Prepare APK
+        shell: bash
         run: |
           APK=$(find . -type f -name
 "*.apk | head -n 1)
@@ -47,16 +41,13 @@ gradle/actions/setup-gradle@v4
            exit 1
         fi
         mkdir -p apk-output
-        cp "$APK" apk-output/
-NOVA-debug.apk
+        cp "$APK" apk-output/NOVA-debug.apk
         echo "hazirlanan APK:"
-        ls -lh apk-output/
-NOVA-debug.apk
+        ls -lh apk-output/NOVA-debug.apk
+        
       - name: Upload APK
-        uses:
-actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: NOVA-APK
-          path: apk-output/
-NOVA-debug.apk
+          path: apk-output/NOVA-debug.apk
          if-no-files-found: error
