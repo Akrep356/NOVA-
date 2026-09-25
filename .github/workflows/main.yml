@@ -24,7 +24,7 @@ jops:
           java-version: '17'
 
       - name: Set up Gradle
-        uses:gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
@@ -35,7 +35,7 @@ jops:
         shell: bash
         run: |
           APK=$(find . -type f -name
-"*.apk | head -n 1)
+"*.apk" | head -n 1)
          if [ -z "$APK" ]; then
            echo "APK bulumadi!"
            exit 1
