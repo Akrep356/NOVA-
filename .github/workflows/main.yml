@@ -40,12 +40,10 @@ jobs:
              echo "APK bulunamadi!"
              exit 1
            fi
-           mkdir -p apk-output/
-NOVA-debug.apk
+           mkdir -p apk-output/NOVA-debug.apk
 
        - name: Upload APK
          uses: actions/upload-artifact@v4
          with:
            name: NOVA-APK
            path: apk-outout/NOVA-debug.apk
-           if-no-files-found: error 
