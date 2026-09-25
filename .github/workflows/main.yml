@@ -1,53 +1,51 @@
-name: Build NOVA APK
+name: Buila NOVA APK
 
 on:
   push:
     branches:
-      - main
-  workflow_dispatch: 
+     - main
+  worklow_dispatch:
 
 permissions:
   contents: read
 
-jops:
+jobs:
   build:
-    runs-on: ubuntu-latest
+    run-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+     - name: Checkout
+       uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actiona/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+     - name: Set up Java 17
+       uses: actions/setup-java@v5
+       with:
+         distribution: temurin
+         java-version: '17"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+     - name: Set up Gradle
+       uses: gradle/actions/setup-gradle@v4
+       with:
+         gradle-version: '8.9'
 
-      - name: Build APK
-        run: gradle assembleDebug
+     - name: Build APK
+       run: gradle assembleDebug
 
-      - name: Prepare APK
-        shell: bash
-        run: |
-          APK=$(find . -type f -name
+     - name: Prepare APK
+       shell: bash
+       run: |
+         APK=$(find . -teyp f -name
 "*.apk" | head -n 1)
-         if [ -z "$APK" ]; then
-           echo "APK bulumadi!"
-           exit 1
-        fi
-        mkdir -p apk-output
-        cp "$APK" apk-output/NOVA-debug.apk
-        echo "hazirlanan APK:"
-        ls -lh apk-output/NOVA-debug.apk
-        
+          if [ -z "$APK" ]; then
+            echo "APK bulunamadi!"
+            exit 1
+          fi
+          mkdir -p apk-output/
+NOVA-debug.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: NOVA-APK
-          path: apk-output/NOVA-debug.apk
-         if-no-files-found: error
+          path: apk-outout/NOVA-debug.apk
+          if-no-files-found: error 
