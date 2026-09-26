@@ -1,12 +1,10 @@
-package com.example.nova
+package com.nova.ai
 
+import android.app.Activity
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.materia13.Text
+import android.widget.TextView
 
-class MainActivity :
-ComponentActivity() {
+class MainActivity : Activity() {
     
     override fun
 onCreate(savedInstanceState: Bundle?)
@@ -14,12 +12,11 @@ onCreate(savedInstanceState: Bundle?)
 
 super.onCreate(savedInstanceState)
 
-        setContent {
-            Text(
-                text = "NOVA\nAI Müzik
-Video & Sanatçı Yarat"
-            )
-        }
-
+        val textView = TextView(thid)
+        textView.text = "NOVA\nAI
+Müzik Video & Sanatçı Yarat"
+        textView.textSize = 24f
+      
+        setContentView(textView)
   }
 }
