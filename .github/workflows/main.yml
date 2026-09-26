@@ -26,11 +26,13 @@ jobs:
         with:
           accept-android-sdk-licenses: 'true'
    
-      - name: Grant execute permission
-        run: chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          grafle-version: '8.7' 
 
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
       - name: Prepare APK
         run: |
