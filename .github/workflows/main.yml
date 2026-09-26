@@ -33,14 +33,12 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p apk-output
-          APK=$(find app/build/
-outputs/apk -name "*.apk" | head -n 1)
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
           if [ -z "$APK" ]; then
             echo "APK bulunamadi!"
             exit 1
           fi
-          cp "$APK" apk-output/
-NOVA-debug.apk
+          cp "$APK" apk-output/NOVA-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
