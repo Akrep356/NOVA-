@@ -1,49 +1,45 @@
-name: Buila NOVA APK
+name: Build APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
-     - main
-  worklow_dispatch:
-
-permissions:
-  contents: read
+      - main
 
 jobs:
   build:
-    run-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v5
+      - name: Set up JDK
+        uses: actions/setup-java@v4
         with:
-        distribution: temurin
-        java-version: '17"
+          distribution: temurin
+          java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
 
       - name: Build APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Prepare APK
-        shell: bash
         run: |
-          APK=$(find . -teyp f -name
-"*.apk" | head -n 1)
-           if [ -z "$APK" ]; then
-             echo "APK bulunamadi!"
-             exit 1
-           fi
-           mkdir -p apk-output/NOVA-debug.apk
+          mkdir -p apk-output
+          APK=$(find app/build/
+outputs/apk -name "*.apk" | head -n 1)
+          cp "$APK" apk-output/
+NOVA-debug.apk
 
-       - name: Upload APK
-         uses: actions/upload-artifact@v4
-         with:
-           name: NOVA-APK
-           path: apk-outout/NOVA-debug.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOVA-debug-APK
+          path: apk-output/NOVA-debug.apk
