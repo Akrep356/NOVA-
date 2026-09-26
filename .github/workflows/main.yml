@@ -35,6 +35,10 @@ jobs:
           mkdir -p apk-output
           APK=$(find app/build/
 outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "APK bulunamadi!"
+            exit 1
+          fi
           cp "$APK" apk-output/
 NOVA-debug.apk
 
