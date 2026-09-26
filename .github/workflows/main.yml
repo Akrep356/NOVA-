@@ -28,7 +28,6 @@ jobs:
 
 log-accepted-android-sdk-licenses: 'false'
           
-
       - name: Grant execute permission
         run: chmod +x gradlew
 
