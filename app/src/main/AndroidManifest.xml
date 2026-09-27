@@ -9,7 +9,8 @@ xmlns:android="http://schemas.android.com/apk/res/android">
 
         <activity
 
-android:name=".MainActivity"
+android:name="com.nova.ai.MainActivity"
+            
             android:exported="true">
             
             <intent-filter>
