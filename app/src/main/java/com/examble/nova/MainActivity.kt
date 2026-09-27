@@ -1,97 +1,128 @@
 package com.examble.nova
 
-import android.graphics.Color
+import android.app.Activity
 import android.os.Bundle
+import android.graphics.Color
+import android.graphics.Typeface
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import
-AndroidX.appcompat.app.AppCompatActivity
 
-class MainActivity :
-AppCompatActivity(){
+class MainActivity : Activity() {
+
+    private val backgroundColor =
+Color.rgb(10, 10, 18)
+    private val cardColor =
+Color.rgb(24, 24, 36)
+    private val accentColor =
+Color.rgb(110, 80, 225)
+    private val whiteColor =
+Color.WHITE
+    private val grayColor=
+Color.rgb(180, 180, 195)
 
     override run
 onCreate(savedInstanceState: Bundle?)
 {
 
-süper.onCreate(savedInstanceState)
+super.onCreate(savedInstanceState)
 
-        val layou =
-LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.set.Padding(32, 80, 32,
-32)
+        window.statusBarColor =
+Color.BLACK
+        window.navigationBarColor =
+Color.BKACK
 
-        layout.gravity =
-Gravuty.CENTER
+        createNovaInterface()
+    }
+    
+    private run createNovaInterface()
+{
 
-layout.setBackgroundColor(Color.grb(18
-, 18, 24))
+        val root = LinearLayout(this)
+        root.orientation =
+LinearLayout.VERTICAL
+
+root.setBackgroundColor(backgroundColor)
+ 
+        root.setPadding(dp(20),
+dp(30), dp(20), dp(20))
 
         val title = TextView(this)
         title.text = "NOVA"
         title.textSize = 36f
-
-title.setTextColor(Color.WHITE)
+        title.setTextColor(whiteColor)
+        title.setTypeface(null,
+Typeface.BOLD
         title.gravity = Gravity.CENTER
 
+        root.addView(
+            title,
+            LinearLayout.LayoutParams(
+
+LinearLayout.LayoutParams.MATCH_PARENT,
+
+LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
         val subtitle = TextView(this)
-        subtitle.text = "AI Music
-Video & Artist Creator"
+        subtitle.text = "AI Müzik 
+Video & Sanatçı Yarat"
         subtitle.textSize = 16f
 
-subtitle.setTextColor(Color.LTGRAY)
+subtitle.setTextColor(grayColor)
         subtitle.gravity =
 Gravity.CENTER
+        subtitle.setPadding(0, dp(6),
+0, dp(25))
 
-        val musicButton = Button(this)
-        musicButton.text = "🎧 Müzik
-Oluştur"
-        musicButton.setOnClickListener
-{
+        root.addView(
+        subtitle,
+        LinearLayout.LayoutParams(
 
-            Toast.makeText(
-                this,
-                "Müzik oluşturma",
-                Toast.LENGTH_SHORT).show()
-        }
+LinearLayout.LayoutParams.MATCH_PARENT,
 
-        val videoButton = Button(this)
-        videoBottun.text = "🎬 Video
-Oluştur"
-        videoButton.setOnClickListener
+LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        
+        val welcome = TextView(this)
 
-{
-            Toast.makeText(
-                this,
-                "Video oluşturma",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        welcome.text = "NOVA'ya hoş
+geldin"
+        welcome.textSize = 24f
 
-        val artistButton =
-Button(this)
-        artistButton.text = "🎤
-Sanatçı Oluştur"
+welcome.setTextColor(whiteColor)
+        welcome.setTypeface(null,
+typeface.BOLD)
+        welcome.gravity =
+Gravity.CENTER
 
-artistButton.setOnClickListener {
-            Toast.makeText(
-                this,
-                "Sanatçı oluşturma",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        root.adfView(
+            welcome
+            LinearLayout.LayoutParams(
 
-        layout.addView(title)
-        layout.addView(subtitle)
-        layout.addView(musicButton)
-        layout.addView(videoButto)
-        layout.addView(artistButton)
+LinearLayout.LayoutParams.MATCH_PARENT,
 
-        setContentView(layout)
-    }
-}
- 
+LinearLayout.LayiutParsms.WRAB_CONTENT
+            )
+        )
+
+        val description =
+TextView(this)
+        description.text =
+            "Hayalindeki müziği
+oluştur, videonu hazırla ve kendi
+sanatçını yarat."
+        description.textSize = 15f
+
+description.setTextColor(grayColor)
+        description.gravity =
+Gravity.CENTER
+        description.setPadding(dp(10),
+dp(10), dp(10), dp(25))
+
+        
