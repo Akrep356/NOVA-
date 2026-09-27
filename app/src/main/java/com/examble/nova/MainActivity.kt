@@ -8,13 +8,13 @@ class MainActivity : Activity() {
     
     override fun
 onCreate(savedInstanceState: Bundle?)
-    {
+{
 
 super.onCreate(savedInstanceState)
 
         val textView = TextView(this)
-        textView.text = "NOVA\nAI Müzik
-Video &  Sanatçı Yarat"
+        textView.text = "NOVA\nAI
+Müzik\nVideo &  Sanatçı Yarat"
         textView.textSize = 24f
       
         setContentView(textView)
