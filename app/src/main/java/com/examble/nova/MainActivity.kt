@@ -1,70 +1,88 @@
-package com.nova.ai
+package com.examble.nova
 
-import android.app.Activity
-import android.os.Bundle
 import android.graphics.Color
+import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import
+AndroidX.appcompat.app.AppCompatActivity
 
-class MainActivity : Activity() {
+class MainActivity :
+AppCompatActivity(){
 
-    override gün
+    override run
 onCreate(savedInstanceState: Bundle?)
 {
 
 süper.onCreate(savedInstanceState)
 
-        val layou = LinearLayout(this)
+        val layou =
+LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
-        layout.set.Padding(32, 32, 32, 32)
+        layout.set.Padding(32, 80, 32,
+32)
 
-        layout.gravity = Gravuty.CENTER
+        layout.gravity =
+Gravuty.CENTER
 
-layout.setBackgroundColor(Color.BLACK)
+layout.setBackgroundColor(Color.grb(18
+, 18, 24))
 
         val title = TextView(this)
         title.text = "NOVA"
         title.textSize = 36f
+
 title.setTextColor(Color.WHITE)
         title.gravity = Gravity.CENTER
 
         val subtitle = TextView(this)
-        subtitle.text = "AI Music Video & Artist Creator"
+        subtitle.text = "AI Music
+Video & Artist Creator"
         subtitle.textSize = 16f
 
 subtitle.setTextColor(Color.LTGRAY)
-        subtitle.gravity = Gravity.CENTER
+        subtitle.gravity =
+Gravity.CENTER
 
         val musicButton = Button(this)
-        musicButton.text = "🎧 Müzik Oluştur"
+        musicButton.text = "🎧 Müzik
+Oluştur"
         musicButton.setOnClickListener
 {
 
-            Toast.makeText(this,
-"Müzik oluşturma",
-Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Müzik oluşturma",
+                Toast.LENGTH_SHORT).show()
         }
 
         val videoButton = Button(this)
-        videoBottun.text = "🎬 Video Oluştur"
+        videoBottun.text = "🎬 Video
+Oluştur"
         videoButton.setOnClickListener
 
 {
-            Toast.makeText(this,
-"Video oluşturma",
-Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Video oluşturma",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
-        val artistButton = Button(this)
-        artistButton.text = "🎤 Sanatçı Oluştur"
+        val artistButton =
+Button(this)
+        artistButton.text = "🎤
+Sanatçı Oluştur"
 
 artistButton.setOnClickListener {
-            Toast.makeText(this,
-Sanatçı oluşturma",
-Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Sanatçı oluşturma",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         layout.addView(title)
