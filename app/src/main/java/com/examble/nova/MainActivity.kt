@@ -1,4 +1,4 @@
-package com.example.nova
+package com.nova.ai
 
 import android.app.Activity
 import android.os.Bundle
