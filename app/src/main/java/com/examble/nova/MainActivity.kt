@@ -125,4 +125,129 @@ Gravity.CENTER
         description.setPadding(dp(10),
 dp(10), dp(10), dp(25))
 
-        
+                root.addView(
+            description,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val musicButton = Button(this)
+        musicButton.text = "🎵 Müzik Oluştur"
+        musicButton.textSize = 18f
+        musicButton.setTextColor(whiteColor)
+        musicButton.setBackgroundColor(accentColor)
+
+        musicButton.setOnClickListener {
+            Toast.makeText(
+                this,
+                "Müzik oluşturma bölümü hazırlanıyor...",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        root.addView(
+            musicButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(55)
+            ).apply {
+                setMargins(0, dp(10), 0, dp(10))
+            }
+        )
+
+        val videoButton = Button(this)
+        videoButton.text = "🎬 Video Oluştur"
+        videoButton.textSize = 18f
+        videoButton.setTextColor(whiteColor)
+        videoButton.setBackgroundColor(cardColor)
+
+        videoButton.setOnClickListener {
+            Toast.makeText(
+                this,
+                "Video oluşturma bölümü hazırlanıyor...",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        root.addView(
+            videoButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(55)
+            ).apply {
+                setMargins(0, 0, 0, dp(10))
+            }
+        )
+
+        val artistButton = Button(this)
+        artistButton.text = "🎤 Sanatçı Oluştur"
+        artistButton.textSize = 18f
+        artistButton.setTextColor(whiteColor)
+        artistButton.setBackgroundColor(cardColor)
+
+        artistButton.setOnClickListener {
+            Toast.makeText(
+                this,
+                "Sanatçı oluşturma bölümü hazırlanıyor...",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        root.addView(
+            artistButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(55)
+            ).apply {
+                setMargins(0, 0, 0, dp(10))
+            }
+        )
+
+        val libraryButton = Button(this)
+        libraryButton.text = "📁 Projelerim"
+        libraryButton.textSize = 18f
+        libraryButton.setTextColor(whiteColor)
+        libraryButton.setBackgroundColor(cardColor)
+
+        libraryButton.setOnClickListener {
+            Toast.makeText(
+                this,
+                "Projelerim bölümü hazırlanıyor...",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        root.addView(
+            libraryButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(55)
+            ).apply {
+                setMargins(0, 0, 0, dp(10))
+            }
+        )
+
+        val footer = TextView(this)
+        footer.text = "NOVA • AI Music Video & Artist Creator"
+        footer.textSize = 12f
+        footer.setTextColor(grayColor)
+        footer.gravity = Gravity.CENTER
+        footer.setPadding(0, dp(20), 0, dp(10))
+
+        root.addView(
+            footer,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        setContentView(root)
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+}
