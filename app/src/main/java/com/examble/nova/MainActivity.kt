@@ -28,8 +28,7 @@ class MainActivity : Activity() {
      * Şimdilik kendi sunucumuz hazır olana kadar
      * bu adresi değiştirmiyoruz.
      */
-    private val musicApiUrl = "https://YOUR-NOVA-SERVER/generate"
-
+    private val musicApiUrl = "https://nova-cf5h.onrender.com/generate"
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNovaInterface()
