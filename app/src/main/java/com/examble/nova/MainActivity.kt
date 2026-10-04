@@ -545,7 +545,7 @@ class MainActivity : Activity() {
 
         Toast.makeText(
             this,
-            "Müzik hazırlanıyor...",
+            "Yaklaşık 30 saniyelik müzik hazırlanıyor...",
             Toast.LENGTH_LONG
         ).show()
 
@@ -835,7 +835,7 @@ class MainActivity : Activity() {
     }
 
     // =============================================================
-    // TEK PARÇA WAV OLUŞTUR
+    // 3 PARÇAYI BİRLEŞTİREREK WAV OLUŞTUR
     // =============================================================
 
     private fun createFinalWav() {
@@ -922,7 +922,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Müzik hazır ve çalıyor.",
+                "Yaklaşık 30 saniyelik müzik hazır ve çalıyor.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -930,7 +930,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Müzik oluşturma hatası: " +
+                "Müzik birleştirme hatası: " +
                         error.message,
                 Toast.LENGTH_LONG
             ).show()
@@ -1150,7 +1150,10 @@ class MainActivity : Activity() {
                             audioBytes.size
                         )
 
-                    audioChunks.clear()
+                    // ÖNEMLİ:
+                    // Burada audioChunks.clear()
+                    // YOK.
+                    // 1., 2. ve 3. parçalar biriktirilir.
 
                     audioChunks.add(
                         pcm
@@ -1158,7 +1161,11 @@ class MainActivity : Activity() {
 
                     Toast.makeText(
                         this@MainActivity,
-                        "Müzik verisi alındı.",
+                        "Müzik bölümü " +
+                                (chunkIndex + 1) +
+                                " / " +
+                                totalChunksFromJs +
+                                " alındı.",
                         Toast.LENGTH_SHORT
                     ).show()
 
