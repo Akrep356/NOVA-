@@ -2,338 +2,465 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NOVA Şarkı Sözleri</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    >
+
+    <title>NOVA - Şarkı Sözü Oluştur</title>
 
     <style>
-        body {
-            background: #111318;
-            color: white;
-            font-family: sans-serif;
-            padding: 20px;
+        * {
+            box-sizing: border-box;
         }
 
-        h2 {
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #09090f;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
             text-align: center;
+            margin-top: 10px;
+            color: #b56cff;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #aaa;
+            margin-bottom: 25px;
         }
 
         textarea {
             width: 100%;
-            box-sizing: border-box;
-            background: #1c1f26;
+            min-height: 150px;
+            background: #151522;
             color: white;
             border: 1px solid #444;
-            border-radius: 10px;
-            padding: 12px;
+            border-radius: 12px;
+            padding: 15px;
             font-size: 16px;
-            margin-bottom: 12px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: #b56cff;
         }
 
         button {
             width: 100%;
-            padding: 14px;
-            border: 0;
-            border-radius: 10px;
-            background: #7c4dff;
-            color: white;
-            font-size: 16px;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 15px;
+            font-size: 17px;
             font-weight: bold;
-            margin-bottom: 12px;
+            color: white;
+            background: linear-gradient(135deg, #7b2cff, #b000ff);
+        }
+
+        button:disabled {
+            opacity: 0.5;
         }
 
         #musicButton {
             display: none;
-            background: #00a86b;
+            background: linear-gradient(135deg, #00a86b, #00d084);
         }
 
         #status {
-            margin-top: 15px;
-            margin-bottom: 15px;
-            color: #bbbbbb;
-            text-align: center;
-            font-size: 16px;
+            margin-top: 18px;
+            padding: 14px;
+            background: #12121c;
+            border-radius: 10px;
+            color: #bbb;
+            line-height: 1.5;
+            min-height: 50px;
         }
 
         #result {
-            margin-top: 5px;
-            min-height: 250px;
+            margin-top: 15px;
+            min-height: 320px;
+        }
+
+        .loading {
+            color: #b56cff;
+        }
+
+        .success {
+            color: #45e68b;
+        }
+
+        .error {
+            color: #ff5c5c;
         }
     </style>
 </head>
 
 <body>
 
-<h2>🎵 NOVA Şarkı Sözleri</h2>
+    <h1>🎤 NOVA</h1>
 
-<textarea
-    id="prompt"
-    rows="4"
-    placeholder="Şarkının konusu ve tarzını yaz...
-Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop"
-></textarea>
+    <div class="subtitle">
+        AI Şarkı Sözü Oluştur
+    </div>
 
-<button onclick="generateLyrics()">
-    🎤 ŞARKI SÖZÜ OLUŞTUR
-</button>
+    <textarea
+        id="prompt"
+        placeholder="Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop, duygusal ama sonunda enerjik"
+    ></textarea>
 
-<div id="status">Hazır</div>
+    <button id="generateButton" onclick="generateLyrics()">
+        🎤 ŞARKI SÖZÜ OLUŞTUR
+    </button>
 
-<textarea
-    id="result"
-    rows="14"
-    placeholder="Oluşturulan şarkı sözleri burada görünecek..."
-></textarea>
+    <div id="status">
+        Hazır.
+    </div>
 
-<button
-    id="musicButton"
-    onclick="createMusicWithLyrics()"
->
-    🎵 BU SÖZLERLE MÜZİK OLUŞTUR
-</button>
+    <textarea
+        id="result"
+        placeholder="Oluşturulan şarkı sözleri burada görünecek..."
+    ></textarea>
 
-<script type="module">
+    <button
+        id="musicButton"
+        onclick="createMusicWithLyrics()"
+    >
+        🎵 BU SÖZLERLE MÜZİK OLUŞTUR
+    </button>
 
-import { pipeline } from
-    "https://cdn.jsdelivr.net/npm/@huggingface/transformers";
+    <script type="module">
 
-let generator = null;
+        import {
+            pipeline
+        } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
 
-let generatedLyrics = "";
+        let generator = null;
 
-async function loadModel() {
+        const promptBox = document.getElementById("prompt");
+        const resultBox = document.getElementById("result");
+        const statusBox = document.getElementById("status");
+        const generateButton = document.getElementById("generateButton");
+        const musicButton = document.getElementById("musicButton");
 
-    if (generator !== null) {
-        return;
-    }
 
-    document.getElementById("status").innerText =
-        "Yapay zekâ modeli yükleniyor...";
-
-    generator = await pipeline(
-        "text2text-generation",
-        "Xenova/mt5-small",
-        {
-            dtype: "q8"
-        }
-    );
-}
-
-function cleanLyrics(text) {
-
-    if (!text) {
-        return "";
-    }
-
-    let cleaned = text;
-
-    cleaned = cleaned.replace(
-        /<extra_id_\d+>/gi,
-        ""
-    );
-
-    cleaned = cleaned.replace(
-        /<pad>/gi,
-        ""
-    );
-
-    cleaned = cleaned.replace(
-        /<\/s>/gi,
-        ""
-    );
-
-    cleaned = cleaned.replace(
-        /^extra_id_\d+\s*:\s*/i,
-        ""
-    );
-
-    cleaned = cleaned.replace(
-        /^:\s*/,
-        ""
-    );
-
-    cleaned = cleaned.trim();
-
-    return cleaned;
-}
-
-window.generateLyrics = async function() {
-
-    const prompt =
-        document.getElementById("prompt")
-            .value
-            .trim();
-
-    if (!prompt) {
-
-        document.getElementById("status").innerText =
-            "Lütfen şarkının konusunu yaz.";
-
-        return;
-    }
-
-    const musicButton =
-        document.getElementById("musicButton");
-
-    musicButton.style.display = "none";
-
-    try {
-
-        await loadModel();
-
-        document.getElementById("status").innerText =
-            "Şarkı sözleri oluşturuluyor...";
-
-        const instruction =
-`
-Türkçe şarkı sözleri yaz.
-
-KONU VE TARZ:
-${prompt}
-
-Şarkıyı şu sırayla yaz:
-
-[Kıta 1]
-4 satır
-
-[Nakarat]
-4 satır
-
-[Kıta 2]
-4 satır
-
-[Nakarat]
-4 satır
-
-[Köprü]
-4 satır
-
-[Son Nakarat]
-4 satır
-
-Sadece şarkı sözlerini yaz.
-Açıklama yazma.
-İngilizce yazma.
-Özel XML veya model tokenları kullanma.
-Anlamlı, akıcı ve kafiyeli Türkçe kullan.
-`;
-
-        const output =
-            await generator(
-                instruction,
-                {
-                    max_new_tokens: 450,
-                    do_sample: true,
-                    temperature: 0.9,
-                    top_k: 50
-                }
-            );
-
-        let lyrics = "";
-
-        if (
-            output &&
-            output[0] &&
-            output[0].generated_text
-        ) {
-
-            lyrics =
-                output[0].generated_text;
+        function setStatus(message, type = "") {
+            statusBox.className = type;
+            statusBox.textContent = message;
         }
 
-        lyrics =
-            cleanLyrics(lyrics);
 
-        if (
-            !lyrics ||
-            lyrics.length < 20
-        ) {
+        function cleanLyrics(text) {
 
-            throw new Error(
-                "Model anlamlı şarkı sözü üretemedi. Lütfen tekrar dene."
-            );
-        }
+            if (!text) {
+                return "";
+            }
 
-        generatedLyrics =
-            lyrics;
+            let lyrics = String(text);
 
-        document.getElementById("result").value =
-            lyrics;
-
-        document.getElementById("status").innerText =
-            "✅ Şarkı sözleri hazır.";
-
-        musicButton.style.display =
-            "block";
-
-        if (
-            typeof AndroidBridge !== "undefined" &&
-            AndroidBridge.onLyricsGenerated
-        ) {
-
-            AndroidBridge.onLyricsGenerated(
-                lyrics
-            );
-        }
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById("status").innerText =
-            "❌ Hata: " +
-            error.message;
-
-        musicButton.style.display =
-            "none";
-
-        if (
-            typeof AndroidBridge !== "undefined" &&
-            AndroidBridge.onLyricsError
-        ) {
-
-            AndroidBridge.onLyricsError(
-                error.message
-            );
-        }
-    }
-};
-
-window.createMusicWithLyrics =
-    function() {
-
-        const lyrics =
-            document.getElementById("result")
-                .value
+            lyrics = lyrics
+                .replace(/<\|im_start\|>/gi, "")
+                .replace(/<\|im_end\|>/gi, "")
+                .replace(/<\|endoftext\|>/gi, "")
+                .replace(/<\|endofprompt\|>/gi, "")
+                .replace(/<extra_id_\d+>/gi, "")
+                .replace(/<pad>/gi, "")
+                .replace(/<\/s>/gi, "")
+                .replace(/<s>/gi, "")
+                .replace(/assistant\s*:/gi, "")
                 .trim();
 
-        if (!lyrics) {
-
-            document.getElementById("status").innerText =
-                "Önce şarkı sözü oluştur.";
-
-            return;
+            return lyrics;
         }
 
-        document.getElementById("status").innerText =
-            "🎵 Sözler NOVA müzik sistemine gönderiliyor...";
 
-        if (
-            typeof AndroidBridge !== "undefined" &&
-            AndroidBridge.onLyricsMusicRequested
-        ) {
+        function extractGeneratedText(output) {
 
-            AndroidBridge.onLyricsMusicRequested(
-                lyrics
+            if (!output || !output.length) {
+                return "";
+            }
+
+            let generated = output[0]?.generated_text;
+
+            if (!generated) {
+                return "";
+            }
+
+            /*
+             * Qwen sohbet formatında generated_text
+             * bazen mesaj dizisi olarak dönebilir.
+             */
+            if (Array.isArray(generated)) {
+
+                const assistantMessage =
+                    [...generated]
+                        .reverse()
+                        .find(
+                            item =>
+                                item &&
+                                item.role === "assistant" &&
+                                item.content
+                        );
+
+                if (assistantMessage) {
+                    return cleanLyrics(assistantMessage.content);
+                }
+
+                const lastItem = generated[generated.length - 1];
+
+                if (lastItem && typeof lastItem === "object") {
+                    return cleanLyrics(lastItem.content || "");
+                }
+
+                return cleanLyrics(String(lastItem || ""));
+            }
+
+            return cleanLyrics(generated);
+        }
+
+
+        async function loadModel() {
+
+            if (generator) {
+                return;
+            }
+
+            setStatus(
+                "🧠 Şarkı sözü yapay zekâsı hazırlanıyor...\n" +
+                "İlk kullanımda model telefona indiriliyor. Lütfen bekle.",
+                "loading"
             );
 
-        } else {
-
-            document.getElementById("status").innerText =
-                "❌ NOVA müzik bağlantısı bulunamadı.";
+            /*
+             * Qwen2.5-0.5B-Instruct
+             * 4-bit quantization
+             *
+             * Android WebView üzerinde mümkün olduğunca
+             * düşük bellek kullanımı için q4 kullanıyoruz.
+             */
+            generator = await pipeline(
+                "text-generation",
+                "onnx-community/Qwen2.5-0.5B-Instruct",
+                {
+                    dtype: "q4"
+                }
+            );
         }
-    };
 
-</script>
+
+        async function generateLyrics() {
+
+            const userPrompt = promptBox.value.trim();
+
+            if (!userPrompt) {
+
+                setStatus(
+                    "❌ Önce nasıl bir şarkı istediğini yaz.",
+                    "error"
+                );
+
+                return;
+            }
+
+            generateButton.disabled = true;
+            musicButton.style.display = "none";
+            resultBox.value = "";
+
+            try {
+
+                await loadModel();
+
+                setStatus(
+                    "✍️ Şarkı sözleri yazılıyor...\n" +
+                    "Bu işlem telefonda gerçekleşiyor, biraz sürebilir.",
+                    "loading"
+                );
+
+
+                const messages = [
+
+                    {
+                        role: "system",
+
+                        content:
+                            "Sen profesyonel bir Türkçe şarkı sözü yazarı ve besteci yardımcısısın. " +
+                            "Kullanıcının verdiği konuya göre özgün, akıcı ve söylenebilir Türkçe şarkı sözleri yaz. " +
+                            "Şarkı sözlerini Türkçe oluştur. " +
+                            "Sözlerde kıta, nakarat ve gerekiyorsa köprü bölümleri kullan. " +
+                            "Nakarat akılda kalıcı olsun. " +
+                            "Duyguyu ve müzikal akışı koru. " +
+                            "Başka şarkılardan alıntı yapma. " +
+                            "Tanınmış sanatçı veya mevcut şarkı sözlerini taklit etme. " +
+                            "Sadece şarkı sözünü ver; açıklama, yorum veya giriş cümlesi yazma."
+                    },
+
+                    {
+                        role: "user",
+
+                        content:
+                            "Şu özelliklere uygun özgün bir Türkçe şarkı sözü yaz:\n\n" +
+                            userPrompt +
+                            "\n\n" +
+                            "Yaklaşık 3-4 kıta ve tekrar edilebilir güçlü bir nakarat oluştur."
+                    }
+
+                ];
+
+
+                const output = await generator(
+                    messages,
+                    {
+                        max_new_tokens: 450,
+                        do_sample: true,
+                        temperature: 0.85,
+                        top_p: 0.9
+                    }
+                );
+
+
+                let lyrics = extractGeneratedText(output);
+
+                /*
+                 * Eğer model promptu da döndürürse,
+                 * assistant bölümünü ayırmaya çalış.
+                 */
+                if (
+                    lyrics.includes("Şu özelliklere uygun özgün") &&
+                    lyrics.includes("Yaklaşık 3-4 kıta")
+                ) {
+
+                    const assistantIndex =
+                        lyrics.lastIndexOf("assistant");
+
+                    if (assistantIndex !== -1) {
+                        lyrics =
+                            lyrics
+                                .substring(assistantIndex + 9)
+                                .trim();
+                    }
+                }
+
+
+                lyrics = cleanLyrics(lyrics);
+
+
+                if (!lyrics || lyrics.length < 30) {
+
+                    throw new Error(
+                        "Model anlamlı şarkı sözü üretemedi. Lütfen tekrar dene."
+                    );
+                }
+
+
+                resultBox.value = lyrics;
+
+                setStatus(
+                    "✅ Şarkı sözleri başarıyla oluşturuldu.",
+                    "success"
+                );
+
+                musicButton.style.display = "block";
+
+
+                if (
+                    window.AndroidBridge &&
+                    typeof window.AndroidBridge.onLyricsGenerated === "function"
+                ) {
+
+                    window.AndroidBridge.onLyricsGenerated(lyrics);
+                }
+
+            }
+            catch (error) {
+
+                console.error(error);
+
+                const message =
+                    error?.message ||
+                    String(error) ||
+                    "Bilinmeyen hata";
+
+                setStatus(
+                    "❌ Hata: " + message,
+                    "error"
+                );
+
+                resultBox.value = "";
+
+                musicButton.style.display = "none";
+
+
+                if (
+                    window.AndroidBridge &&
+                    typeof window.AndroidBridge.onLyricsError === "function"
+                ) {
+
+                    window.AndroidBridge.onLyricsError(message);
+                }
+
+            }
+            finally {
+
+                generateButton.disabled = false;
+            }
+        }
+
+
+        window.createMusicWithLyrics = function () {
+
+            const lyrics = cleanLyrics(
+                resultBox.value.trim()
+            );
+
+            if (!lyrics || lyrics.length < 10) {
+
+                setStatus(
+                    "❌ Önce geçerli şarkı sözleri oluştur.",
+                    "error"
+                );
+
+                return;
+            }
+
+
+            setStatus(
+                "🎵 Şarkı sözleri müzik sistemine gönderiliyor...",
+                "loading"
+            );
+
+
+            if (
+                window.AndroidBridge &&
+                typeof window.AndroidBridge.onLyricsMusicRequested === "function"
+            ) {
+
+                window.AndroidBridge.onLyricsMusicRequested(lyrics);
+
+            } else {
+
+                setStatus(
+                    "❌ Android müzik bağlantısı bulunamadı.",
+                    "error"
+                );
+            }
+        };
+
+
+        /*
+         * AndroidBridge hazır mı kontrolü.
+         */
+        setStatus(
+            "Hazır. Şarkının konusunu yaz ve oluştur.",
+            ""
+        );
+
+    </script>
 
 </body>
 </html>
