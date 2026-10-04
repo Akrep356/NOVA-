@@ -17,12 +17,17 @@ import android.widget.TextView
 import android.widget.Toast
 import android.media.MediaPlayer
 import android.util.Base64
+import android.content.ContentValues
+import android.provider.MediaStore
+import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : Activity() {
 
     private var mediaPlayer: MediaPlayer? = null
+
+    private var generatedAudioFile: File? = null
 
     private lateinit var musicWebView: WebView
 
@@ -161,11 +166,49 @@ class MainActivity : Activity() {
             )
         )
 
+        val playButton =
+            Button(this)
+
+        playButton.text =
+            "▶ OYNAT"
+
+        playButton.setOnClickListener {
+
+            playMusic()
+        }
+
+        root.addView(
+            playButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        val pauseButton =
+            Button(this)
+
+        pauseButton.text =
+            "⏸ DURAKLAT / DEVAM ET"
+
+        pauseButton.setOnClickListener {
+
+            pauseResumeMusic()
+        }
+
+        root.addView(
+            pauseButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
         val stopButton =
             Button(this)
 
         stopButton.text =
-            "MÜZİĞİ DURDUR"
+            "⏹ DURDUR"
 
         stopButton.setOnClickListener {
 
@@ -174,6 +217,25 @@ class MainActivity : Activity() {
 
         root.addView(
             stopButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        val saveButton =
+            Button(this)
+
+        saveButton.text =
+            "💾 TELEFONA KAYDET"
+
+        saveButton.setOnClickListener {
+
+            saveMusicToPhone()
+        }
+
+        root.addView(
+            saveButton,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(55)
@@ -268,6 +330,121 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun playMusic() {
+
+        val file =
+            generatedAudioFile
+
+        if (file == null || !file.exists()) {
+
+            Toast.makeText(
+                this,
+                "Önce bir müzik oluştur.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        try {
+
+            if (mediaPlayer == null) {
+
+                mediaPlayer =
+                    MediaPlayer()
+
+                mediaPlayer?.setDataSource(
+                    file.absolutePath
+                )
+
+                mediaPlayer?.prepare()
+
+                mediaPlayer?.setOnCompletionListener {
+
+                    Toast.makeText(
+                        this,
+                        "Müzik tamamlandı.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                mediaPlayer?.start()
+
+            } else {
+
+                if (mediaPlayer?.isPlaying == false) {
+
+                    mediaPlayer?.start()
+                }
+            }
+
+            Toast.makeText(
+                this,
+                "Müzik çalıyor.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+        } catch (error: Exception) {
+
+            Toast.makeText(
+                this,
+                "Müzik oynatma hatası: " +
+                        error.message,
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun pauseResumeMusic() {
+
+        val player =
+            mediaPlayer
+
+        if (player == null) {
+
+            Toast.makeText(
+                this,
+                "Önce bir müzik oluştur.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        try {
+
+            if (player.isPlaying) {
+
+                player.pause()
+
+                Toast.makeText(
+                    this,
+                    "Müzik duraklatıldı.",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+            } else {
+
+                player.start()
+
+                Toast.makeText(
+                    this,
+                    "Müzik devam ediyor.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+        } catch (error: Exception) {
+
+            Toast.makeText(
+                this,
+                "Oynatma hatası: " +
+                        error.message,
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private fun stopMusic() {
 
         try {
@@ -286,6 +463,116 @@ class MainActivity : Activity() {
             "Müzik durduruldu.",
             Toast.LENGTH_SHORT
         ).show()
+    }
+
+    private fun saveMusicToPhone() {
+
+        val sourceFile =
+            generatedAudioFile
+
+        if (sourceFile == null ||
+            !sourceFile.exists()
+        ) {
+
+            Toast.makeText(
+                this,
+                "Önce bir müzik oluştur.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        try {
+
+            val resolver =
+                contentResolver
+
+            val values =
+                ContentValues().apply {
+
+                    put(
+                        MediaStore.Downloads.DISPLAY_NAME,
+                        "NOVA_Muzik_${System.currentTimeMillis()}.wav"
+                    )
+
+                    put(
+                        MediaStore.Downloads.MIME_TYPE,
+                        "audio/wav"
+                    )
+
+                    if (Build.VERSION.SDK_INT >=
+                        Build.VERSION_CODES.Q
+                    ) {
+
+                        put(
+                            MediaStore.Downloads.IS_PENDING,
+                            1
+                        )
+                    }
+                }
+
+            val uri =
+                resolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    values
+                )
+
+            if (uri == null) {
+
+                Toast.makeText(
+                    this,
+                    "Dosya kaydedilemedi.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return
+            }
+
+            resolver.openOutputStream(uri).use { output ->
+
+                sourceFile.inputStream().use { input ->
+
+                    input.copyTo(output!!)
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.Q
+            ) {
+
+                val updateValues =
+                    ContentValues().apply {
+
+                        put(
+                            MediaStore.Downloads.IS_PENDING,
+                            0
+                        )
+                    }
+
+                resolver.update(
+                    uri,
+                    updateValues,
+                    null,
+                    null
+                )
+            }
+
+            Toast.makeText(
+                this,
+                "Müzik telefona kaydedildi.",
+                Toast.LENGTH_LONG
+            ).show()
+
+        } catch (error: Exception) {
+
+            Toast.makeText(
+                this,
+                "Kaydetme hatası: " +
+                        error.message,
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     inner class MusicGenBridge {
@@ -334,6 +621,9 @@ class MainActivity : Activity() {
                             audioBytes
                         )
                     }
+
+                    generatedAudioFile =
+                        audioFile
 
                     mediaPlayer?.release()
 
