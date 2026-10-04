@@ -1164,4 +1164,209 @@ class MainActivity : Activity() {
 
                 } catch (error: Exception) {
 
-                    Toast
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ses verisi işleme hatası: " +
+                                error.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicComplete() {
+
+            runOnUiThread {
+
+                if (
+                    audioChunks.isEmpty()
+                ) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Müzik verisi alınamadı.",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    return@runOnUiThread
+                }
+
+                createFinalWav()
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicError(
+            message: String
+        ) {
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "MusicGen hatası: " +
+                            message,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicGenerated(
+            base64Audio: String
+        ) {
+
+            runOnUiThread {
+
+                try {
+
+                    val audioBytes =
+                        Base64.decode(
+                            base64Audio,
+                            Base64.DEFAULT
+                        )
+
+                    val audioFile =
+                        File(
+                            cacheDir,
+                            "nova_music.wav"
+                        )
+
+                    FileOutputStream(
+                        audioFile
+                    ).use { output ->
+
+                        output.write(
+                            audioBytes
+                        )
+                    }
+
+                    generatedAudioFile =
+                        audioFile
+
+                    mediaPlayer?.release()
+
+                    mediaPlayer =
+                        MediaPlayer()
+
+                    mediaPlayer?.setDataSource(
+                        audioFile.absolutePath
+                    )
+
+                    mediaPlayer?.prepare()
+
+                    mediaPlayer?.start()
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Müzik hazır ve çalıyor.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                } catch (error: Exception) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ses oynatma hatası: " +
+                                error.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    // =============================================================
+    // JAVASCRIPT ESCAPE
+    // =============================================================
+
+    private fun JSONObjectEscape(
+        text: String
+    ): String {
+
+        return "\"" +
+                text
+                    .replace(
+                        "\\",
+                        "\\\\"
+                    )
+                    .replace(
+                        "\"",
+                        "\\\""
+                    )
+                    .replace(
+                        "\n",
+                        "\\n"
+                    )
+                    .replace(
+                        "\r",
+                        "\\r"
+                    )
+                    .replace(
+                        "\t",
+                        "\\t"
+                    ) +
+                "\""
+    }
+
+    // =============================================================
+    // DP
+    // =============================================================
+
+    private fun dp(
+        value: Int
+    ): Int {
+
+        return (
+            value *
+                    resources
+                        .displayMetrics
+                        .density
+        ).toInt()
+    }
+
+    // =============================================================
+    // GERİ TUŞU
+    // =============================================================
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+
+        if (
+            lyricsWebView != null
+        ) {
+
+            lyricsWebView?.destroy()
+
+            lyricsWebView = null
+
+            setContentView(
+                mainRoot
+            )
+
+            return
+        }
+
+        super.onBackPressed()
+    }
+
+    // =============================================================
+    // DESTROY
+    // =============================================================
+
+    override fun onDestroy() {
+
+        mediaPlayer?.release()
+
+        mediaPlayer = null
+
+        musicWebView.destroy()
+
+        lyricsWebView?.destroy()
+
+        lyricsWebView = null
+
+        super.onDestroy()
+    }
+}
