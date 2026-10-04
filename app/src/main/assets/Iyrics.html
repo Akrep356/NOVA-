@@ -1,1 +1,93 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA Şarkı Sözleri</title>
+</head>
 
+<body>
+
+<script type="module">
+
+import { pipeline } from
+    "https://cdn.jsdelivr.net/npm/@huggingface/transformers";
+
+let generator = null;
+
+async function loadModel() {
+
+    if (generator !== null) {
+        return;
+    }
+
+    if (window.AndroidBridge) {
+        AndroidBridge.onLyricsStatus("Şarkı sözü yapay zekâsı yükleniyor...");
+    }
+
+    generator = await pipeline(
+        "text2text-generation",
+        "Xenova/mt5-small"
+    );
+
+    if (window.AndroidBridge) {
+        AndroidBridge.onLyricsStatus("Şarkı sözü yapay zekâsı hazır.");
+    }
+}
+
+window.generateLyrics = async function(topic, style) {
+
+    try {
+
+        await loadModel();
+
+        if (window.AndroidBridge) {
+            AndroidBridge.onLyricsStatus(
+                "Şarkı sözleri oluşturuluyor..."
+            );
+        }
+
+        const prompt =
+            "Türkçe bir şarkı yaz. " +
+            "Şarkının konusu: " + topic + ". " +
+            "Müzik tarzı: " + style + ". " +
+            "Şarkıda 2 kıta, 2 nakarat ve 1 köprü olsun. " +
+            "Duygusal ve anlamlı Türkçe sözler kullan. " +
+            "Şarkı sözlerini düzenli biçimde yaz.";
+
+        const result = await generator(prompt, {
+            max_new_tokens: 300,
+            do_sample: true
+        });
+
+        let lyrics = "";
+
+        if (result && result.length > 0) {
+            lyrics = result[0].generated_text || "";
+        }
+
+        if (!lyrics) {
+            throw new Error("Şarkı sözü üretilemedi.");
+        }
+
+        if (window.AndroidBridge) {
+            AndroidBridge.onLyricsGenerated(lyrics);
+            AndroidBridge.onLyricsStatus(
+                "Şarkı sözleri hazır."
+            );
+        }
+
+    } catch (error) {
+
+        if (window.AndroidBridge) {
+            AndroidBridge.onLyricsError(
+                error.message || "Bilinmeyen hata"
+            );
+        }
+    }
+};
+
+</script>
+
+</body>
+</html>
