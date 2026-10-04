@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -10,6 +11,7 @@
     <title>NOVA - Şarkı Sözü Oluştur</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -33,6 +35,14 @@
             text-align: center;
             color: #aaa;
             margin-bottom: 25px;
+        }
+
+        .label {
+            display: block;
+            margin: 15px 0 8px 4px;
+            color: #ddd;
+            font-size: 16px;
+            font-weight: bold;
         }
 
         textarea {
@@ -81,6 +91,7 @@
             color: #bbb;
             line-height: 1.5;
             min-height: 50px;
+            white-space: pre-line;
         }
 
         #result {
@@ -99,6 +110,7 @@
         .error {
             color: #ff5c5c;
         }
+
     </style>
 </head>
 
@@ -110,23 +122,35 @@
         AI Şarkı Sözü Oluştur
     </div>
 
+
+    <label class="label">
+        🎵 Şarkı konusu
+    </label>
+
     <textarea
         id="prompt"
-        placeholder="Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop, duygusal ama sonunda enerjik"
+        placeholder="Örnek: Aşkını kaybeden birinin yeniden umut bulması"
     ></textarea>
 
-    <button id="generateButton" onclick="generateLyrics()">
+
+    <button
+        id="generateButton"
+        onclick="generateLyrics()"
+    >
         🎤 ŞARKI SÖZÜ OLUŞTUR
     </button>
 
+
     <div id="status">
-        Hazır.
+        Hazır. Şarkının konusunu yaz ve oluştur.
     </div>
+
 
     <textarea
         id="result"
         placeholder="Oluşturulan şarkı sözleri burada görünecek..."
     ></textarea>
+
 
     <button
         id="musicButton"
@@ -135,23 +159,37 @@
         🎵 BU SÖZLERLE MÜZİK OLUŞTUR
     </button>
 
+
     <script type="module">
 
         import {
             pipeline
         } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
 
+
         let generator = null;
 
-        const promptBox = document.getElementById("prompt");
-        const resultBox = document.getElementById("result");
-        const statusBox = document.getElementById("status");
-        const generateButton = document.getElementById("generateButton");
-        const musicButton = document.getElementById("musicButton");
+
+        const promptBox =
+            document.getElementById("prompt");
+
+        const resultBox =
+            document.getElementById("result");
+
+        const statusBox =
+            document.getElementById("status");
+
+        const generateButton =
+            document.getElementById("generateButton");
+
+        const musicButton =
+            document.getElementById("musicButton");
 
 
         function setStatus(message, type = "") {
+
             statusBox.className = type;
+
             statusBox.textContent = message;
         }
 
@@ -163,6 +201,7 @@
             }
 
             let lyrics = String(text);
+
 
             lyrics = lyrics
                 .replace(/<\|im_start\|>/gi, "")
@@ -176,6 +215,7 @@
                 .replace(/assistant\s*:/gi, "")
                 .trim();
 
+
             return lyrics;
         }
 
@@ -186,16 +226,16 @@
                 return "";
             }
 
-            let generated = output[0]?.generated_text;
+
+            let generated =
+                output[0]?.generated_text;
+
 
             if (!generated) {
                 return "";
             }
 
-            /*
-             * Qwen sohbet formatında generated_text
-             * bazen mesaj dizisi olarak dönebilir.
-             */
+
             if (Array.isArray(generated)) {
 
                 const assistantMessage =
@@ -208,18 +248,35 @@
                                 item.content
                         );
 
+
                 if (assistantMessage) {
-                    return cleanLyrics(assistantMessage.content);
+
+                    return cleanLyrics(
+                        assistantMessage.content
+                    );
                 }
 
-                const lastItem = generated[generated.length - 1];
 
-                if (lastItem && typeof lastItem === "object") {
-                    return cleanLyrics(lastItem.content || "");
+                const lastItem =
+                    generated[generated.length - 1];
+
+
+                if (
+                    lastItem &&
+                    typeof lastItem === "object"
+                ) {
+
+                    return cleanLyrics(
+                        lastItem.content || ""
+                    );
                 }
 
-                return cleanLyrics(String(lastItem || ""));
+
+                return cleanLyrics(
+                    String(lastItem || "")
+                );
             }
+
 
             return cleanLyrics(generated);
         }
@@ -231,19 +288,15 @@
                 return;
             }
 
+
             setStatus(
-                "🧠 Şarkı sözü yapay zekâsı hazırlanıyor...\n" +
-                "İlk kullanımda model telefona indiriliyor. Lütfen bekle.",
+                "🧠 Şarkı sözü yapay zekâsı hazırlanıyor...\n\n" +
+                "İlk kullanımda model telefona indiriliyor.\n" +
+                "Lütfen bekle...",
                 "loading"
             );
 
-            /*
-             * Qwen2.5-0.5B-Instruct
-             * 4-bit quantization
-             *
-             * Android WebView üzerinde mümkün olduğunca
-             * düşük bellek kullanımı için q4 kullanıyoruz.
-             */
+
             generator = await pipeline(
                 "text-generation",
                 "onnx-community/Qwen2.5-0.5B-Instruct",
@@ -254,31 +307,48 @@
         }
 
 
-        async function generateLyrics() {
+        /*
+         * ÖNEMLİ:
+         * Fonksiyonu window.generateLyrics olarak tanımlıyoruz.
+         *
+         * Böylece HTML'deki
+         *
+         * onclick="generateLyrics()"
+         *
+         * butonu bu fonksiyona erişebiliyor.
+         */
+        window.generateLyrics = async function() {
 
-            const userPrompt = promptBox.value.trim();
+            const userPrompt =
+                promptBox.value.trim();
+
 
             if (!userPrompt) {
 
                 setStatus(
-                    "❌ Önce nasıl bir şarkı istediğini yaz.",
+                    "❌ Önce şarkının konusunu yaz.",
                     "error"
                 );
 
                 return;
             }
 
+
             generateButton.disabled = true;
+
             musicButton.style.display = "none";
+
             resultBox.value = "";
+
 
             try {
 
                 await loadModel();
 
+
                 setStatus(
-                    "✍️ Şarkı sözleri yazılıyor...\n" +
-                    "Bu işlem telefonda gerçekleşiyor, biraz sürebilir.",
+                    "✍️ Şarkı sözleri yazılıyor...\n\n" +
+                    "Lütfen bekle.",
                     "loading"
                 );
 
@@ -290,67 +360,53 @@
 
                         content:
                             "Sen profesyonel bir Türkçe şarkı sözü yazarı ve besteci yardımcısısın. " +
-                            "Kullanıcının verdiği konuya göre özgün, akıcı ve söylenebilir Türkçe şarkı sözleri yaz. " +
-                            "Şarkı sözlerini Türkçe oluştur. " +
-                            "Sözlerde kıta, nakarat ve gerekiyorsa köprü bölümleri kullan. " +
+                            "Kullanıcının verdiği konuya göre tamamen özgün Türkçe şarkı sözleri yaz. " +
+                            "Şarkı sözleri doğal, akıcı ve söylenebilir olsun. " +
+                            "Kıta, nakarat ve gerektiğinde köprü bölümleri oluştur. " +
                             "Nakarat akılda kalıcı olsun. " +
-                            "Duyguyu ve müzikal akışı koru. " +
                             "Başka şarkılardan alıntı yapma. " +
-                            "Tanınmış sanatçı veya mevcut şarkı sözlerini taklit etme. " +
-                            "Sadece şarkı sözünü ver; açıklama, yorum veya giriş cümlesi yazma."
+                            "Tanınmış sanatçıların mevcut şarkı sözlerini taklit etme. " +
+                            "Sadece şarkı sözlerini yaz. " +
+                            "Açıklama veya yorum ekleme."
                     },
 
                     {
                         role: "user",
 
                         content:
-                            "Şu özelliklere uygun özgün bir Türkçe şarkı sözü yaz:\n\n" +
+                            "Şu konu hakkında özgün bir Türkçe şarkı sözü yaz:\n\n" +
                             userPrompt +
                             "\n\n" +
-                            "Yaklaşık 3-4 kıta ve tekrar edilebilir güçlü bir nakarat oluştur."
+                            "Yaklaşık 3-4 kıta ve güçlü, tekrar edilebilir bir nakarat oluştur."
                     }
 
                 ];
 
 
-                const output = await generator(
-                    messages,
-                    {
-                        max_new_tokens: 450,
-                        do_sample: true,
-                        temperature: 0.85,
-                        top_p: 0.9
-                    }
-                );
+                const output =
+                    await generator(
+                        messages,
+                        {
+                            max_new_tokens: 450,
+                            do_sample: true,
+                            temperature: 0.85,
+                            top_p: 0.9
+                        }
+                    );
 
 
-                let lyrics = extractGeneratedText(output);
+                let lyrics =
+                    extractGeneratedText(output);
 
-                /*
-                 * Eğer model promptu da döndürürse,
-                 * assistant bölümünü ayırmaya çalış.
-                 */
+
+                lyrics =
+                    cleanLyrics(lyrics);
+
+
                 if (
-                    lyrics.includes("Şu özelliklere uygun özgün") &&
-                    lyrics.includes("Yaklaşık 3-4 kıta")
+                    !lyrics ||
+                    lyrics.length < 30
                 ) {
-
-                    const assistantIndex =
-                        lyrics.lastIndexOf("assistant");
-
-                    if (assistantIndex !== -1) {
-                        lyrics =
-                            lyrics
-                                .substring(assistantIndex + 9)
-                                .trim();
-                    }
-                }
-
-
-                lyrics = cleanLyrics(lyrics);
-
-
-                if (!lyrics || lyrics.length < 30) {
 
                     throw new Error(
                         "Model anlamlı şarkı sözü üretemedi. Lütfen tekrar dene."
@@ -358,22 +414,29 @@
                 }
 
 
-                resultBox.value = lyrics;
+                resultBox.value =
+                    lyrics;
+
 
                 setStatus(
                     "✅ Şarkı sözleri başarıyla oluşturuldu.",
                     "success"
                 );
 
-                musicButton.style.display = "block";
+
+                musicButton.style.display =
+                    "block";
 
 
                 if (
                     window.AndroidBridge &&
-                    typeof window.AndroidBridge.onLyricsGenerated === "function"
+                    typeof window.AndroidBridge.onLyricsGenerated ===
+                        "function"
                 ) {
 
-                    window.AndroidBridge.onLyricsGenerated(lyrics);
+                    window.AndroidBridge.onLyricsGenerated(
+                        lyrics
+                    );
                 }
 
             }
@@ -381,80 +444,94 @@
 
                 console.error(error);
 
+
                 const message =
                     error?.message ||
                     String(error) ||
                     "Bilinmeyen hata";
+
 
                 setStatus(
                     "❌ Hata: " + message,
                     "error"
                 );
 
+
                 resultBox.value = "";
 
-                musicButton.style.display = "none";
+                musicButton.style.display =
+                    "none";
 
 
                 if (
                     window.AndroidBridge &&
-                    typeof window.AndroidBridge.onLyricsError === "function"
+                    typeof window.AndroidBridge.onLyricsError ===
+                        "function"
                 ) {
 
-                    window.AndroidBridge.onLyricsError(message);
+                    window.AndroidBridge.onLyricsError(
+                        message
+                    );
                 }
 
             }
             finally {
 
-                generateButton.disabled = false;
-            }
-        }
-
-
-        window.createMusicWithLyrics = function () {
-
-            const lyrics = cleanLyrics(
-                resultBox.value.trim()
-            );
-
-            if (!lyrics || lyrics.length < 10) {
-
-                setStatus(
-                    "❌ Önce geçerli şarkı sözleri oluştur.",
-                    "error"
-                );
-
-                return;
-            }
-
-
-            setStatus(
-                "🎵 Şarkı sözleri müzik sistemine gönderiliyor...",
-                "loading"
-            );
-
-
-            if (
-                window.AndroidBridge &&
-                typeof window.AndroidBridge.onLyricsMusicRequested === "function"
-            ) {
-
-                window.AndroidBridge.onLyricsMusicRequested(lyrics);
-
-            } else {
-
-                setStatus(
-                    "❌ Android müzik bağlantısı bulunamadı.",
-                    "error"
-                );
+                generateButton.disabled =
+                    false;
             }
         };
 
 
-        /*
-         * AndroidBridge hazır mı kontrolü.
-         */
+        window.createMusicWithLyrics =
+            function() {
+
+                const lyrics =
+                    cleanLyrics(
+                        resultBox.value.trim()
+                    );
+
+
+                if (
+                    !lyrics ||
+                    lyrics.length < 10
+                ) {
+
+                    setStatus(
+                        "❌ Önce geçerli şarkı sözleri oluştur.",
+                        "error"
+                    );
+
+                    return;
+                }
+
+
+                setStatus(
+                    "🎵 Şarkı sözleri müzik sistemine gönderiliyor...",
+                    "loading"
+                );
+
+
+                if (
+                    window.AndroidBridge &&
+                    typeof window.AndroidBridge.onLyricsMusicRequested ===
+                        "function"
+                ) {
+
+                    window.AndroidBridge.onLyricsMusicRequested(
+                        lyrics
+                    );
+
+                } else {
+
+                    setStatus(
+                        "❌ Android müzik bağlantısı bulunamadı.",
+                        "error"
+                    );
+                }
+            };
+
+
         setStatus(
             "Hazır. Şarkının konusunu yaz ve oluştur.",
             ""
