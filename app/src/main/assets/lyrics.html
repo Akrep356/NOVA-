@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -41,7 +43,7 @@
             display: block;
             margin: 15px 0 8px 4px;
             color: #ddd;
-            font-size: 16px;
+            font-size: 17px;
             font-weight: bold;
         }
 
@@ -112,11 +114,15 @@
         }
 
     </style>
+
 </head>
+
 
 <body>
 
+
     <h1>🎤 NOVA</h1>
+
 
     <div class="subtitle">
         AI Şarkı Sözü Oluştur
@@ -163,6 +169,7 @@
 
     <script type="module">
 
+
         import {
             pipeline
         } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
@@ -174,14 +181,18 @@
         const promptBox =
             document.getElementById("prompt");
 
+
         const resultBox =
             document.getElementById("result");
+
 
         const statusBox =
             document.getElementById("status");
 
+
         const generateButton =
             document.getElementById("generateButton");
+
 
         const musicButton =
             document.getElementById("musicButton");
@@ -201,6 +212,7 @@
                 return "";
             }
 
+
             let lyrics = String(text);
 
 
@@ -213,7 +225,6 @@
                 .replace(/<pad>/gi, "")
                 .replace(/<\/s>/gi, "")
                 .replace(/<s>/gi, "")
-                .replace(/^assistant\s*:/gim, "")
                 .trim();
 
 
@@ -230,8 +241,7 @@
 
             setStatus(
                 "🧠 NOVA şarkı sözü yapay zekâsı hazırlanıyor...\n\n" +
-                "İlk kullanımda model telefona indiriliyor.\n" +
-                "Model büyük olduğu için bu işlem biraz sürebilir.\n" +
+                "İlk kullanımda yaklaşık 483 MB model indirilecek.\n" +
                 "Lütfen uygulamayı kapatma.",
                 "loading"
             );
@@ -239,22 +249,22 @@
 
             generator = await pipeline(
                 "text-generation",
-                "onnx-community/Qwen2.5-1.5B-Instruct",
+                "onnx-community/Qwen2.5-0.5B-Instruct",
                 {
-                    dtype: "q4"
+                    dtype: "q4f16"
                 }
             );
         }
 
 
-        function getAssistantText(output) {
+        function extractText(output) {
 
             if (!output || !output.length) {
                 return "";
             }
 
 
-            const generated =
+            let generated =
                 output[0]?.generated_text;
 
 
@@ -265,35 +275,35 @@
 
             if (Array.isArray(generated)) {
 
-                const lastMessage =
-                    generated[generated.length - 1];
+                const assistant =
+                    [...generated]
+                        .reverse()
+                        .find(
+                            item =>
+                                item &&
+                                item.role === "assistant"
+                        );
 
 
-                if (
-                    lastMessage &&
-                    lastMessage.role === "assistant"
-                ) {
+                if (assistant) {
 
                     return cleanLyrics(
-                        lastMessage.content || ""
+                        assistant.content || ""
                     );
                 }
 
 
-                const assistantMessage =
-                    [...generated]
-                        .reverse()
-                        .find(
-                            message =>
-                                message &&
-                                message.role === "assistant"
-                        );
+                const last =
+                    generated[generated.length - 1];
 
 
-                if (assistantMessage) {
+                if (
+                    last &&
+                    typeof last === "object"
+                ) {
 
                     return cleanLyrics(
-                        assistantMessage.content || ""
+                        last.content || ""
                     );
                 }
             }
@@ -303,14 +313,14 @@
         }
 
 
-        function looksLikeLyrics(text) {
+        function isValidLyrics(text) {
 
             if (!text) {
                 return false;
             }
 
 
-            if (text.length < 80) {
+            if (text.length < 100) {
                 return false;
             }
 
@@ -319,68 +329,84 @@
                 text.toLocaleLowerCase("tr-TR");
 
 
-            const badPhrases = [
+            const forbidden = [
 
-                "ödeme sonunda",
+                "yapay zekâ",
+                "yapay zeka",
+                "model",
+                "ödeme",
                 "size yardımcı",
+                "yardımcı olmak",
                 "bu yazıda",
-                "birkaç tane",
-                "söndürüyoruz",
-                "sütuna",
-                "kubra",
-                "kullanacağım",
-                "yardımcı olmak için",
-                "şarkı sözlerini kullanacağım"
+                "şarkı sözü yazacağım",
+                "şarkı sözleri yazacağım",
+                "kullanıcı",
+                "sistem",
+                "asistan",
+                "türkçe söndürüyoruz",
+                "kubra"
+
             ];
 
 
-            for (const phrase of badPhrases) {
+            for (const word of forbidden) {
 
-                if (lower.includes(phrase)) {
+                if (lower.includes(word)) {
                     return false;
                 }
             }
 
 
-            const lyricWords = [
+            const sections = [
 
+                "[kıta",
+                "[nakarat",
+                "[köprü",
+                "[son nakarat",
+                "kıta 1",
                 "nakarat",
-                "kıta",
-                "köprü",
-                "aşk",
-                "kalp",
-                "gece",
-                "göz",
-                "yol",
-                "umut",
-                "sevda",
-                "özlem",
-                "hayat"
+                "köprü"
+
             ];
 
 
-            let score = 0;
+            let sectionCount = 0;
 
 
-            for (const word of lyricWords) {
+            for (const section of sections) {
 
-                if (lower.includes(word)) {
-                    score++;
+                if (lower.includes(section)) {
+                    sectionCount++;
                 }
             }
 
 
             const lineCount =
-                text.split("\n").filter(
-                    line => line.trim().length > 0
-                ).length;
+                text
+                    .split("\n")
+                    .filter(
+                        line =>
+                            line.trim().length > 0
+                    )
+                    .length;
 
 
-            return score >= 2 && lineCount >= 5;
+            if (lineCount < 8) {
+                return false;
+            }
+
+
+            if (sectionCount < 2) {
+                return false;
+            }
+
+
+            return true;
         }
 
 
         window.generateLyrics = async function() {
+
 
             const userPrompt =
                 promptBox.value.trim();
@@ -399,19 +425,22 @@
 
             generateButton.disabled = true;
 
-            musicButton.style.display = "none";
+
+            musicButton.style.display =
+                "none";
+
 
             resultBox.value = "";
 
 
             try {
 
+
                 await loadModel();
 
 
                 setStatus(
                     "✍️ NOVA şarkı sözlerini yazıyor...\n\n" +
-                    "Bu işlem telefonda gerçekleşiyor.\n" +
                     "Lütfen bekle.",
                     "loading"
                 );
@@ -419,33 +448,35 @@
 
                 const messages = [
 
+
                     {
                         role: "system",
 
                         content:
-                            "Sen yalnızca Türkçe şarkı sözü yazan profesyonel bir söz yazarı ol. " +
-                            "Kullanıcının verdiği konuyu temel al. " +
-                            "Özgün ve doğal Türkçe kullan. " +
-                            "Şarkı sözünde [Kıta 1], [Nakarat], [Kıta 2], [Nakarat], [Köprü], [Son Nakarat] bölümleri kullan. " +
-                            "Nakarat güçlü ve akılda kalıcı olsun. " +
-                            "Her bölümde gerçek şarkı dizeleri yaz. " +
-                            "Açıklama yapma. " +
+                            "Sen profesyonel bir Türkçe pop şarkı sözleri yazarıısın. " +
+                            "Sadece özgün Türkçe şarkı sözü üret. " +
+                            "Açıklama yazma. " +
                             "Kullanıcıya cevap verme. " +
-                            "Ödeme, yapay zekâ, model, yazı yazma, yardım, sistem veya teknik konulardan bahsetme. " +
-                            "Sadece şarkı sözünü üret."
+                            "Yapay zekâdan, modelden, sistemden veya teknik konulardan bahsetme. " +
+                            "Şarkı şu sırayla olsun: " +
+                            "[Kıta 1], [Nakarat], [Kıta 2], [Nakarat], [Köprü], [Son Nakarat]. " +
+                            "Her bölümde gerçek ve anlamlı Türkçe dizeler olsun. " +
+                            "Nakarat akılda kalıcı ve tekrar edilebilir olsun. " +
+                            "Sözler duygusal olarak tutarlı olsun. " +
+                            "Konu dışına çıkma."
                     },
+
 
                     {
                         role: "user",
 
                         content:
-                            "Türkçe bir şarkı yaz.\n\n" +
-                            "ŞARKI KONUSU:\n" +
+                            "Şu konu hakkında Türkçe pop şarkısı yaz:\n\n" +
                             userPrompt +
                             "\n\n" +
-                            "Şarkı doğrudan sözlerle başlasın. " +
-                            "Yaklaşık 3-4 kıta, güçlü bir nakarat, bir köprü ve final nakaratı olsun. " +
-                            "Duygusal olarak tutarlı, söylenebilir ve özgün olsun."
+                            "Şarkıya doğrudan [Kıta 1] ile başla. " +
+                            "En az 8-10 bölüm/dize üret. " +
+                            "Finalde [Son Nakarat] ile güçlü şekilde bitir."
                     }
 
                 ];
@@ -455,27 +486,27 @@
                     await generator(
                         messages,
                         {
-                            max_new_tokens: 500,
+                            max_new_tokens: 320,
                             do_sample: true,
                             temperature: 0.75,
                             top_p: 0.9,
-                            repetition_penalty: 1.08
+                            repetition_penalty: 1.12
                         }
                     );
 
 
                 let lyrics =
-                    getAssistantText(output);
+                    extractText(output);
 
 
                 lyrics =
                     cleanLyrics(lyrics);
 
 
-                if (!looksLikeLyrics(lyrics)) {
+                if (!isValidLyrics(lyrics)) {
 
                     throw new Error(
-                        "Yapay zekâ düzgün şarkı sözü oluşturamadı. Lütfen tekrar dene."
+                        "Yapay zekâ düzgün bir Türkçe şarkı sözü oluşturamadı. Lütfen tekrar dene."
                     );
                 }
 
@@ -505,8 +536,10 @@
                     );
                 }
 
+
             }
             catch (error) {
+
 
                 console.error(error);
 
@@ -525,6 +558,7 @@
 
                 resultBox.value = "";
 
+
                 musicButton.style.display =
                     "none";
 
@@ -540,17 +574,20 @@
                     );
                 }
 
+
             }
             finally {
 
                 generateButton.disabled =
                     false;
             }
+
         };
 
 
         window.createMusicWithLyrics =
             function() {
+
 
                 const lyrics =
                     cleanLyrics(
@@ -595,6 +632,7 @@
                         "error"
                     );
                 }
+
             };
 
 
@@ -603,7 +641,10 @@
             ""
         );
 
+
     </script>
 
+
 </body>
+
 </html>
