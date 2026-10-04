@@ -38,16 +38,24 @@
             color: white;
             font-size: 16px;
             font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        #musicButton {
+            display: none;
+            background: #00a86b;
         }
 
         #status {
             margin-top: 15px;
+            margin-bottom: 15px;
             color: #bbbbbb;
             text-align: center;
+            font-size: 16px;
         }
 
         #result {
-            margin-top: 15px;
+            margin-top: 5px;
             min-height: 250px;
         }
     </style>
@@ -61,8 +69,8 @@
     id="prompt"
     rows="4"
     placeholder="Şarkının konusu ve tarzını yaz...
-Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop">
-</textarea>
+Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop"
+></textarea>
 
 <button onclick="generateLyrics()">
     🎤 ŞARKI SÖZÜ OLUŞTUR
@@ -76,12 +84,21 @@
     placeholder="Oluşturulan şarkı sözleri burada görünecek..."
 ></textarea>
 
+<button
+    id="musicButton"
+    onclick="createMusicWithLyrics()"
+>
+    🎵 BU SÖZLERLE MÜZİK OLUŞTUR
+</button>
+
 <script type="module">
 
 import { pipeline } from
     "https://cdn.jsdelivr.net/npm/@huggingface/transformers";
 
 let generator = null;
+
+let generatedLyrics = "";
 
 async function loadModel() {
 
@@ -101,10 +118,50 @@ async function loadModel() {
     );
 }
 
+function cleanLyrics(text) {
+
+    if (!text) {
+        return "";
+    }
+
+    let cleaned = text;
+
+    cleaned = cleaned.replace(
+        /<extra_id_\d+>/gi,
+        ""
+    );
+
+    cleaned = cleaned.replace(
+        /<pad>/gi,
+        ""
+    );
+
+    cleaned = cleaned.replace(
+        /<\/s>/gi,
+        ""
+    );
+
+    cleaned = cleaned.replace(
+        /^extra_id_\d+\s*:\s*/i,
+        ""
+    );
+
+    cleaned = cleaned.replace(
+        /^:\s*/,
+        ""
+    );
+
+    cleaned = cleaned.trim();
+
+    return cleaned;
+}
+
 window.generateLyrics = async function() {
 
     const prompt =
-        document.getElementById("prompt").value.trim();
+        document.getElementById("prompt")
+            .value
+            .trim();
 
     if (!prompt) {
 
@@ -114,6 +171,11 @@ window.generateLyrics = async function() {
         return;
     }
 
+    const musicButton =
+        document.getElementById("musicButton");
+
+    musicButton.style.display = "none";
+
     try {
 
         await loadModel();
@@ -121,13 +183,14 @@ window.generateLyrics = async function() {
         document.getElementById("status").innerText =
             "Şarkı sözleri oluşturuluyor...";
 
-        const instruction = `
-Türkçe bir şarkı yaz.
+        const instruction =
+`
+Türkçe şarkı sözleri yaz.
 
-Konu ve tarz:
+KONU VE TARZ:
 ${prompt}
 
-Şarkı yapısı:
+Şarkıyı şu sırayla yaz:
 
 [Kıta 1]
 4 satır
@@ -147,23 +210,23 @@ ${prompt}
 [Son Nakarat]
 4 satır
 
-Kurallar:
-- Türkçe yaz.
-- Anlamlı ve akıcı olsun.
-- Aynı cümleleri gereksiz yere tekrarlama.
-- Şarkı sözü formatını koru.
-- Kafiye ve ritme dikkat et.
-- Açıklama yazma, sadece şarkı sözlerini yaz.
+Sadece şarkı sözlerini yaz.
+Açıklama yazma.
+İngilizce yazma.
+Özel XML veya model tokenları kullanma.
+Anlamlı, akıcı ve kafiyeli Türkçe kullan.
 `;
 
-        const output = await generator(
-            instruction,
-            {
-                max_new_tokens: 450,
-                do_sample: true,
-                temperature: 0.9
-            }
-        );
+        const output =
+            await generator(
+                instruction,
+                {
+                    max_new_tokens: 450,
+                    do_sample: true,
+                    temperature: 0.9,
+                    top_k: 50
+                }
+            );
 
         let lyrics = "";
 
@@ -172,27 +235,43 @@ Kurallar:
             output[0] &&
             output[0].generated_text
         ) {
-            lyrics = output[0].generated_text;
+
+            lyrics =
+                output[0].generated_text;
         }
 
-        if (!lyrics) {
+        lyrics =
+            cleanLyrics(lyrics);
+
+        if (
+            !lyrics ||
+            lyrics.length < 20
+        ) {
+
             throw new Error(
-                "Şarkı sözü oluşturulamadı."
+                "Model anlamlı şarkı sözü üretemedi. Lütfen tekrar dene."
             );
         }
 
+        generatedLyrics =
+            lyrics;
+
         document.getElementById("result").value =
-            lyrics.trim();
+            lyrics;
 
         document.getElementById("status").innerText =
             "✅ Şarkı sözleri hazır.";
+
+        musicButton.style.display =
+            "block";
 
         if (
             typeof AndroidBridge !== "undefined" &&
             AndroidBridge.onLyricsGenerated
         ) {
+
             AndroidBridge.onLyricsGenerated(
-                lyrics.trim()
+                lyrics
             );
         }
 
@@ -201,18 +280,58 @@ Kurallar:
         console.error(error);
 
         document.getElementById("status").innerText =
-            "❌ Hata: " + error.message;
+            "❌ Hata: " +
+            error.message;
+
+        musicButton.style.display =
+            "none";
 
         if (
             typeof AndroidBridge !== "undefined" &&
             AndroidBridge.onLyricsError
         ) {
+
             AndroidBridge.onLyricsError(
                 error.message
             );
         }
     }
 };
+
+window.createMusicWithLyrics =
+    function() {
+
+        const lyrics =
+            document.getElementById("result")
+                .value
+                .trim();
+
+        if (!lyrics) {
+
+            document.getElementById("status").innerText =
+                "Önce şarkı sözü oluştur.";
+
+            return;
+        }
+
+        document.getElementById("status").innerText =
+            "🎵 Sözler NOVA müzik sistemine gönderiliyor...";
+
+        if (
+            typeof AndroidBridge !== "undefined" &&
+            AndroidBridge.onLyricsMusicRequested
+        ) {
+
+            AndroidBridge.onLyricsMusicRequested(
+                lyrics
+            );
+
+        } else {
+
+            document.getElementById("status").innerText =
+                "❌ NOVA müzik bağlantısı bulunamadı.";
+        }
+    };
 
 </script>
 
