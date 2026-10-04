@@ -581,15 +581,15 @@ class MainActivity : Activity() {
                 )
 
                 val json =
-                    "{"
-                        + "\"prompt\":" +
+                    "{" +
+                        "\"prompt\":" +
                         JSONObjectEscape(
                             userPrompt
-                        )
-                        + ","
-                        + "\"duration\":" +
-                        musicDurationSeconds
-                        + "}"
+                        ) +
+                        "," +
+                        "\"duration\":" +
+                        musicDurationSeconds +
+                        "}"
 
                 connection.outputStream.use { output ->
 
