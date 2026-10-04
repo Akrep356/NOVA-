@@ -127,6 +127,7 @@
         🎵 Şarkı konusu
     </label>
 
+
     <textarea
         id="prompt"
         placeholder="Örnek: Aşkını kaybeden birinin yeniden umut bulması"
@@ -212,73 +213,11 @@
                 .replace(/<pad>/gi, "")
                 .replace(/<\/s>/gi, "")
                 .replace(/<s>/gi, "")
-                .replace(/assistant\s*:/gi, "")
+                .replace(/^assistant\s*:/gim, "")
                 .trim();
 
 
             return lyrics;
-        }
-
-
-        function extractGeneratedText(output) {
-
-            if (!output || !output.length) {
-                return "";
-            }
-
-
-            let generated =
-                output[0]?.generated_text;
-
-
-            if (!generated) {
-                return "";
-            }
-
-
-            if (Array.isArray(generated)) {
-
-                const assistantMessage =
-                    [...generated]
-                        .reverse()
-                        .find(
-                            item =>
-                                item &&
-                                item.role === "assistant" &&
-                                item.content
-                        );
-
-
-                if (assistantMessage) {
-
-                    return cleanLyrics(
-                        assistantMessage.content
-                    );
-                }
-
-
-                const lastItem =
-                    generated[generated.length - 1];
-
-
-                if (
-                    lastItem &&
-                    typeof lastItem === "object"
-                ) {
-
-                    return cleanLyrics(
-                        lastItem.content || ""
-                    );
-                }
-
-
-                return cleanLyrics(
-                    String(lastItem || "")
-                );
-            }
-
-
-            return cleanLyrics(generated);
         }
 
 
@@ -290,16 +229,17 @@
 
 
             setStatus(
-                "🧠 Şarkı sözü yapay zekâsı hazırlanıyor...\n\n" +
+                "🧠 NOVA şarkı sözü yapay zekâsı hazırlanıyor...\n\n" +
                 "İlk kullanımda model telefona indiriliyor.\n" +
-                "Lütfen bekle...",
+                "Model büyük olduğu için bu işlem biraz sürebilir.\n" +
+                "Lütfen uygulamayı kapatma.",
                 "loading"
             );
 
 
             generator = await pipeline(
                 "text-generation",
-                "onnx-community/Qwen2.5-0.5B-Instruct",
+                "onnx-community/Qwen2.5-1.5B-Instruct",
                 {
                     dtype: "q4"
                 }
@@ -307,16 +247,139 @@
         }
 
 
-        /*
-         * ÖNEMLİ:
-         * Fonksiyonu window.generateLyrics olarak tanımlıyoruz.
-         *
-         * Böylece HTML'deki
-         *
-         * onclick="generateLyrics()"
-         *
-         * butonu bu fonksiyona erişebiliyor.
-         */
+        function getAssistantText(output) {
+
+            if (!output || !output.length) {
+                return "";
+            }
+
+
+            const generated =
+                output[0]?.generated_text;
+
+
+            if (!generated) {
+                return "";
+            }
+
+
+            if (Array.isArray(generated)) {
+
+                const lastMessage =
+                    generated[generated.length - 1];
+
+
+                if (
+                    lastMessage &&
+                    lastMessage.role === "assistant"
+                ) {
+
+                    return cleanLyrics(
+                        lastMessage.content || ""
+                    );
+                }
+
+
+                const assistantMessage =
+                    [...generated]
+                        .reverse()
+                        .find(
+                            message =>
+                                message &&
+                                message.role === "assistant"
+                        );
+
+
+                if (assistantMessage) {
+
+                    return cleanLyrics(
+                        assistantMessage.content || ""
+                    );
+                }
+            }
+
+
+            return cleanLyrics(generated);
+        }
+
+
+        function looksLikeLyrics(text) {
+
+            if (!text) {
+                return false;
+            }
+
+
+            if (text.length < 80) {
+                return false;
+            }
+
+
+            const lower =
+                text.toLocaleLowerCase("tr-TR");
+
+
+            const badPhrases = [
+
+                "ödeme sonunda",
+                "size yardımcı",
+                "bu yazıda",
+                "birkaç tane",
+                "söndürüyoruz",
+                "sütuna",
+                "kubra",
+                "kullanacağım",
+                "yardımcı olmak için",
+                "şarkı sözlerini kullanacağım"
+            ];
+
+
+            for (const phrase of badPhrases) {
+
+                if (lower.includes(phrase)) {
+                    return false;
+                }
+            }
+
+
+            const lyricWords = [
+
+                "nakarat",
+                "kıta",
+                "köprü",
+                "aşk",
+                "kalp",
+                "gece",
+                "göz",
+                "yol",
+                "umut",
+                "sevda",
+                "özlem",
+                "hayat"
+            ];
+
+
+            let score = 0;
+
+
+            for (const word of lyricWords) {
+
+                if (lower.includes(word)) {
+                    score++;
+                }
+            }
+
+
+            const lineCount =
+                text.split("\n").filter(
+                    line => line.trim().length > 0
+                ).length;
+
+
+            return score >= 2 && lineCount >= 5;
+        }
+
+
         window.generateLyrics = async function() {
 
             const userPrompt =
@@ -347,7 +410,8 @@
 
 
                 setStatus(
-                    "✍️ Şarkı sözleri yazılıyor...\n\n" +
+                    "✍️ NOVA şarkı sözlerini yazıyor...\n\n" +
+                    "Bu işlem telefonda gerçekleşiyor.\n" +
                     "Lütfen bekle.",
                     "loading"
                 );
@@ -359,25 +423,29 @@
                         role: "system",
 
                         content:
-                            "Sen profesyonel bir Türkçe şarkı sözü yazarı ve besteci yardımcısısın. " +
-                            "Kullanıcının verdiği konuya göre tamamen özgün Türkçe şarkı sözleri yaz. " +
-                            "Şarkı sözleri doğal, akıcı ve söylenebilir olsun. " +
-                            "Kıta, nakarat ve gerektiğinde köprü bölümleri oluştur. " +
-                            "Nakarat akılda kalıcı olsun. " +
-                            "Başka şarkılardan alıntı yapma. " +
-                            "Tanınmış sanatçıların mevcut şarkı sözlerini taklit etme. " +
-                            "Sadece şarkı sözlerini yaz. " +
-                            "Açıklama veya yorum ekleme."
+                            "Sen yalnızca Türkçe şarkı sözü yazan profesyonel bir söz yazarı ol. " +
+                            "Kullanıcının verdiği konuyu temel al. " +
+                            "Özgün ve doğal Türkçe kullan. " +
+                            "Şarkı sözünde [Kıta 1], [Nakarat], [Kıta 2], [Nakarat], [Köprü], [Son Nakarat] bölümleri kullan. " +
+                            "Nakarat güçlü ve akılda kalıcı olsun. " +
+                            "Her bölümde gerçek şarkı dizeleri yaz. " +
+                            "Açıklama yapma. " +
+                            "Kullanıcıya cevap verme. " +
+                            "Ödeme, yapay zekâ, model, yazı yazma, yardım, sistem veya teknik konulardan bahsetme. " +
+                            "Sadece şarkı sözünü üret."
                     },
 
                     {
                         role: "user",
 
                         content:
-                            "Şu konu hakkında özgün bir Türkçe şarkı sözü yaz:\n\n" +
+                            "Türkçe bir şarkı yaz.\n\n" +
+                            "ŞARKI KONUSU:\n" +
                             userPrompt +
                             "\n\n" +
-                            "Yaklaşık 3-4 kıta ve güçlü, tekrar edilebilir bir nakarat oluştur."
+                            "Şarkı doğrudan sözlerle başlasın. " +
+                            "Yaklaşık 3-4 kıta, güçlü bir nakarat, bir köprü ve final nakaratı olsun. " +
+                            "Duygusal olarak tutarlı, söylenebilir ve özgün olsun."
                     }
 
                 ];
@@ -387,29 +455,27 @@
                     await generator(
                         messages,
                         {
-                            max_new_tokens: 450,
+                            max_new_tokens: 500,
                             do_sample: true,
-                            temperature: 0.85,
-                            top_p: 0.9
+                            temperature: 0.75,
+                            top_p: 0.9,
+                            repetition_penalty: 1.08
                         }
                     );
 
 
                 let lyrics =
-                    extractGeneratedText(output);
+                    getAssistantText(output);
 
 
                 lyrics =
                     cleanLyrics(lyrics);
 
 
-                if (
-                    !lyrics ||
-                    lyrics.length < 30
-                ) {
+                if (!looksLikeLyrics(lyrics)) {
 
                     throw new Error(
-                        "Model anlamlı şarkı sözü üretemedi. Lütfen tekrar dene."
+                        "Yapay zekâ düzgün şarkı sözü oluşturamadı. Lütfen tekrar dene."
                     );
                 }
 
@@ -494,7 +560,7 @@
 
                 if (
                     !lyrics ||
-                    lyrics.length < 10
+                    lyrics.length < 30
                 ) {
 
                     setStatus(
