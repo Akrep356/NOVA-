@@ -6,61 +6,91 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.media.MediaPlayer
+import android.util.Base64
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
 
     private var mediaPlayer: MediaPlayer? = null
 
-    /*
-     * NOVA müzik üretim sunucusunun adresi.
-     *
-     * Şimdilik kendi sunucumuz hazır olana kadar
-     * bu adresi değiştirmiyoruz.
-     */
-    private val musicApiUrl = "https://nova-cf5h.onrender.com/generate"
+    private lateinit var musicWebView: WebView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         createNovaInterface()
+
+        setupMusicGen()
     }
 
     private fun createNovaInterface() {
 
         val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(Color.rgb(12, 12, 20))
-        root.setPadding(dp(20), dp(24), dp(20), dp(20))
+
+        root.orientation =
+            LinearLayout.VERTICAL
+
+        root.setBackgroundColor(
+            Color.rgb(12, 12, 20)
+        )
+
+        root.setPadding(
+            dp(20),
+            dp(24),
+            dp(20),
+            dp(20)
+        )
 
         val title = TextView(this)
+
         title.text = "NOVA"
+
         title.textSize = 32f
-        title.setTextColor(Color.WHITE)
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-        title.gravity = Gravity.CENTER
+
+        title.setTextColor(
+            Color.WHITE
+        )
+
+        title.setTypeface(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        title.gravity =
+            Gravity.CENTER
 
         root.addView(
             title,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(60)
+                dp(55)
             )
         )
 
         val subtitle = TextView(this)
-        subtitle.text = "AI Müzik Video & Sanatçı Yarat"
+
+        subtitle.text =
+            "AI Müzik Video & Sanatçı Yarat"
+
         subtitle.textSize = 16f
-        subtitle.setTextColor(Color.LTGRAY)
-        subtitle.gravity = Gravity.CENTER
+
+        subtitle.setTextColor(
+            Color.LTGRAY
+        )
+
+        subtitle.gravity =
+            Gravity.CENTER
 
         root.addView(
             subtitle,
@@ -71,33 +101,52 @@ class MainActivity : Activity() {
         )
 
         val prompt = EditText(this)
-        prompt.hint = "Nasıl bir şarkı oluşturmak istiyorsun?"
-        prompt.setHintTextColor(Color.GRAY)
-        prompt.setTextColor(Color.WHITE)
+
+        prompt.hint =
+            "Nasıl bir şarkı oluşturmak istiyorsun?"
+
+        prompt.setHintTextColor(
+            Color.GRAY
+        )
+
+        prompt.setTextColor(
+            Color.WHITE
+        )
+
         prompt.setSingleLine(false)
-        prompt.gravity = Gravity.TOP
+
+        prompt.gravity =
+            Gravity.TOP
 
         root.addView(
             prompt,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(120)
+                dp(130)
             )
         )
 
-        val musicButton = Button(this)
-        musicButton.text = "MÜZİK OLUŞTUR"
+        val musicButton =
+            Button(this)
+
+        musicButton.text =
+            "MÜZİK OLUŞTUR"
 
         musicButton.setOnClickListener {
 
-            val userPrompt = prompt.text.toString().trim()
+            val userPrompt =
+                prompt.text
+                    .toString()
+                    .trim()
 
             if (userPrompt.isEmpty()) {
+
                 Toast.makeText(
                     this,
                     "Önce nasıl bir müzik istediğini yaz.",
                     Toast.LENGTH_SHORT
                 ).show()
+
                 return@setOnClickListener
             }
 
@@ -112,10 +161,14 @@ class MainActivity : Activity() {
             )
         )
 
-        val stopButton = Button(this)
-        stopButton.text = "MÜZİĞİ DURDUR"
+        val stopButton =
+            Button(this)
+
+        stopButton.text =
+            "MÜZİĞİ DURDUR"
 
         stopButton.setOnClickListener {
+
             stopMusic()
         }
 
@@ -127,13 +180,17 @@ class MainActivity : Activity() {
             )
         )
 
-        val videoButton = Button(this)
-        videoButton.text = "VİDEO OLUŞTUR"
+        val videoButton =
+            Button(this)
+
+        videoButton.text =
+            "VİDEO OLUŞTUR"
 
         videoButton.setOnClickListener {
+
             Toast.makeText(
                 this,
-                "NOVA video oluşturma bölümü hazırlanıyor.",
+                "Video oluşturma bölümü hazırlanıyor.",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -146,123 +203,163 @@ class MainActivity : Activity() {
             )
         )
 
-        val artistButton = Button(this)
-        artistButton.text = "SANATÇI OLUŞTUR"
+        musicWebView =
+            WebView(this)
 
-        artistButton.setOnClickListener {
-            Toast.makeText(
-                this,
-                "NOVA sanatçı oluşturma bölümü hazırlanıyor.",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        musicWebView.visibility =
+            WebView.GONE
 
         root.addView(
-            artistButton,
+            musicWebView,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(55)
+                1,
+                1
             )
         )
 
         setContentView(root)
     }
 
-    private fun generateMusic(prompt: String) {
+    private fun setupMusicGen() {
+
+        musicWebView.settings.javaScriptEnabled =
+            true
+
+        musicWebView.settings.domStorageEnabled =
+            true
+
+        musicWebView.settings.allowFileAccess =
+            true
+
+        musicWebView.settings.allowContentAccess =
+            true
+
+        musicWebView.settings.cacheMode =
+            WebSettings.LOAD_DEFAULT
+
+        musicWebView.webViewClient =
+            WebViewClient()
+
+        musicWebView.addJavascriptInterface(
+            MusicGenBridge(),
+            "AndroidBridge"
+        )
+
+        musicWebView.loadUrl(
+            "file:///android_asset/musicgen.html"
+        )
+    }
+
+    private fun generateMusic(
+        userPrompt: String
+    ) {
 
         Toast.makeText(
             this,
-            "NOVA müzik oluşturuyor...",
-            Toast.LENGTH_LONG
+            "MusicGen hazırlanıyor...",
+            Toast.LENGTH_SHORT
         ).show()
 
-        thread {
+        musicWebView.evaluateJavascript(
+            "javascript:generateMusic(" +
+                    JSONObjectEscape(userPrompt) +
+                    ")",
+            null
+        )
+    }
 
-            try {
+    private fun stopMusic() {
 
-                val url = URL(musicApiUrl)
+        try {
 
-                val connection =
-                    url.openConnection() as HttpURLConnection
+            mediaPlayer?.stop()
 
-                connection.requestMethod = "POST"
-                connection.doOutput = true
-                connection.connectTimeout = 30000
-                connection.readTimeout = 120000
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
-                )
+        } catch (_: Exception) {
+        }
 
-                val json =
-                    "{\"prompt\":\"${escapeJson(prompt)}\"}"
+        mediaPlayer?.release()
 
-                connection.outputStream.use { output ->
-                    output.write(json.toByteArray())
-                    output.flush()
-                }
+        mediaPlayer = null
 
-                val responseCode = connection.responseCode
+        Toast.makeText(
+            this,
+            "Müzik durduruldu.",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 
-                if (responseCode == 200) {
+    inner class MusicGenBridge {
 
-                    val musicFile =
-                        File(cacheDir, "nova_music.mp3")
+        @JavascriptInterface
+        fun onStatus(
+            message: String
+        ) {
 
-                    connection.inputStream.use { input ->
+            runOnUiThread {
 
-                        FileOutputStream(musicFile).use { output ->
+                Toast.makeText(
+                    this@MainActivity,
+                    message,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
 
-                            val buffer = ByteArray(8192)
+        @JavascriptInterface
+        fun onMusicGenerated(
+            base64Audio: String
+        ) {
 
-                            var length: Int
+            runOnUiThread {
 
-                            while (
-                                input.read(buffer).also {
-                                    length = it
-                                } != -1
-                            ) {
-                                output.write(
-                                    buffer,
-                                    0,
-                                    length
-                                )
-                            }
-                        }
+                try {
+
+                    val audioBytes =
+                        Base64.decode(
+                            base64Audio,
+                            Base64.DEFAULT
+                        )
+
+                    val audioFile =
+                        File(
+                            cacheDir,
+                            "nova_music.wav"
+                        )
+
+                    FileOutputStream(
+                        audioFile
+                    ).use { output ->
+
+                        output.write(
+                            audioBytes
+                        )
                     }
 
-                    runOnUiThread {
+                    mediaPlayer?.release()
 
-                        Toast.makeText(
-                            this,
-                            "Müzik hazır! Çalınıyor...",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                    mediaPlayer =
+                        MediaPlayer()
 
-                        playMusic(musicFile)
-                    }
+                    mediaPlayer?.setDataSource(
+                        audioFile.absolutePath
+                    )
 
-                } else {
+                    mediaPlayer?.prepare()
 
-                    runOnUiThread {
-
-                        Toast.makeText(
-                            this,
-                            "Müzik üretilemedi. Sunucu hatası: $responseCode",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-
-                connection.disconnect()
-
-            } catch (e: Exception) {
-
-                runOnUiThread {
+                    mediaPlayer?.start()
 
                     Toast.makeText(
-                        this,
-                        "Bağlantı hatası: ${e.message}",
+                        this@MainActivity,
+                        "Müzik hazır ve çalıyor.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                } catch (error: Exception) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ses oynatma hatası: " +
+                                error.message,
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -270,56 +367,52 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun playMusic(file: File) {
+    private fun JSONObjectEscape(
+        text: String
+    ): String {
 
-        stopMusic()
-
-        mediaPlayer = MediaPlayer()
-
-        mediaPlayer?.setDataSource(
-            file.absolutePath
-        )
-
-        mediaPlayer?.prepare()
-
-        mediaPlayer?.start()
-
-        mediaPlayer?.setOnCompletionListener {
-            stopMusic()
-        }
+        return "\"" +
+                text
+                    .replace(
+                        "\\",
+                        "\\\\"
+                    )
+                    .replace(
+                        "\"",
+                        "\\\""
+                    )
+                    .replace(
+                        "\n",
+                        "\\n"
+                    )
+                    .replace(
+                        "\r",
+                        "\\r"
+                    )
+                    .replace(
+                        "\t",
+                        "\\t"
+                    ) +
+                "\""
     }
 
-    private fun stopMusic() {
-
-        try {
-            mediaPlayer?.stop()
-        } catch (_: Exception) {
-        }
-
-        mediaPlayer?.release()
-        mediaPlayer = null
-    }
-
-    private fun escapeJson(text: String): String {
-
-        return text
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-    }
-
-    private fun dp(value: Int): Int {
+    private fun dp(
+        value: Int
+    ): Int {
 
         return (
             value *
-            resources.displayMetrics.density
+                    resources.displayMetrics.density
         ).toInt()
     }
 
     override fun onDestroy() {
 
-        stopMusic()
+        mediaPlayer?.release()
+
+        mediaPlayer = null
+
+        musicWebView.destroy()
 
         super.onDestroy()
     }
