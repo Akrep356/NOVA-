@@ -29,14 +29,11 @@ app.get("/health", (_req, res) => {
   });
 });
 
-/*
- * ============================================================
- * MEVCUT MÜZİK SİSTEMİ
- * ============================================================
- * Bu bölüm mevcut Stable Audio sistemidir.
- * DEĞİŞTİRİLMEDİ.
- */
 
+/*
+ * EXISTING MUSIC GENERATION
+ * Bu bölüm değiştirilmedi.
+ */
 app.post("/generate", async (req, res) => {
   try {
     if (!STABILITY_API_KEY) {
@@ -96,7 +93,9 @@ app.post("/generate", async (req, res) => {
       });
     }
 
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const audioBuffer = Buffer.from(
+      await response.arrayBuffer()
+    );
 
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader(
@@ -118,14 +117,11 @@ app.post("/generate", async (req, res) => {
 
 
 /*
- * ============================================================
- * NOVA ŞARKI SÖZÜ SİSTEMİ
- * ============================================================
- * Telefon -> Render -> Gemini -> Türkçe şarkı sözü
+ * GEMINI TÜRKÇE ŞARKI SÖZÜ OLUŞTURMA
  */
-
 app.post("/generate-lyrics", async (req, res) => {
   try {
+
     if (!GEMINI_API_KEY) {
       return res.status(500).json({
         error: "GEMINI_API_KEY is not configured on the server."
@@ -148,15 +144,18 @@ app.post("/generate-lyrics", async (req, res) => {
       });
     }
 
+
     const prompt = `
 Sen NOVA adlı müzik uygulamasının profesyonel Türkçe şarkı sözü yazarısın.
 
 Kullanıcının verdiği konu:
+
 ${topic}
 
 Bu konuya uygun, tamamen Türkçe, doğal, duygusal ve müzikal bir şarkı sözü yaz.
 
 KESİN KURALLAR:
+
 - Sadece şarkı sözünü yaz.
 - Açıklama yapma.
 - "Tabii", "Elbette", "İşte", "Umarım beğenirsin" gibi girişler yazma.
@@ -198,14 +197,17 @@ KESİN KURALLAR:
 Sadece bu şarkı sözünü döndür.
 `;
 
+
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": GEMINI_API_KEY
         },
+
         body: JSON.stringify({
           contents: [
             {
@@ -216,19 +218,24 @@ Sadece bu şarkı sözünü döndür.
               ]
             }
           ],
+
           generationConfig: {
-            temperature: 0.9,
-            topP: 0.95,
             maxOutputTokens: 3000
           }
         })
       }
     );
 
+
     const responseText = await response.text();
 
+
     if (!response.ok) {
-      console.error("Gemini API error:", responseText);
+
+      console.error(
+        "Gemini API error:",
+        responseText
+      );
 
       return res.status(response.status).json({
         error: "Gemini lyrics generation failed.",
@@ -236,36 +243,56 @@ Sadece bu şarkı sözünü döndür.
       });
     }
 
+
     let data;
 
     try {
+
       data = JSON.parse(responseText);
+
     } catch (parseError) {
-      console.error("Gemini JSON parse error:", parseError);
+
+      console.error(
+        "Gemini JSON parse error:",
+        parseError
+      );
 
       return res.status(500).json({
         error: "Invalid response received from Gemini."
       });
     }
 
+
     const lyrics = data?.candidates?.[0]?.content?.parts
-      ?.map(part => typeof part?.text === "string" ? part.text : "")
+      ?.map(part =>
+        typeof part?.text === "string"
+          ? part.text
+          : ""
+      )
       .join("")
       .trim();
 
+
     if (!lyrics) {
+
       return res.status(500).json({
         error: "Gemini did not return lyrics."
       });
     }
+
 
     return res.json({
       ok: true,
       lyrics: lyrics
     });
 
+
   } catch (error) {
-    console.error("Lyrics generation error:", error);
+
+    console.error(
+      "Lyrics generation error:",
+      error
+    );
 
     return res.status(500).json({
       error: "NOVA lyrics generation server error."
@@ -274,12 +301,10 @@ Sadece bu şarkı sözünü döndür.
 });
 
 
-/*
- * ============================================================
- * SERVER
- * ============================================================
- */
-
 app.listen(PORT, () => {
-  console.log(`NOVA Music Server listening on port ${PORT}`);
+
+  console.log(
+    `NOVA Music Server listening on port ${PORT}`
+  );
+
 });
