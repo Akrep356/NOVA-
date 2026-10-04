@@ -22,6 +22,7 @@ import android.provider.MediaStore
 import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
+import java.io.ByteArrayOutputStream
 
 class MainActivity : Activity() {
 
@@ -31,7 +32,18 @@ class MainActivity : Activity() {
 
     private lateinit var musicWebView: WebView
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    private val audioChunks =
+        ArrayList<ByteArray>()
+
+    private var audioSampleRate = 32000
+
+    private val chunkDurationSeconds = 10
+
+    private val totalChunks = 27
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
         super.onCreate(savedInstanceState)
 
         createNovaInterface()
@@ -155,7 +167,9 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
 
-            generateMusic(userPrompt)
+            generateMusic(
+                userPrompt
+            )
         }
 
         root.addView(
@@ -316,15 +330,25 @@ class MainActivity : Activity() {
         userPrompt: String
     ) {
 
+        audioChunks.clear()
+
+        generatedAudioFile = null
+
+        mediaPlayer?.release()
+
+        mediaPlayer = null
+
         Toast.makeText(
             this,
-            "MusicGen hazırlanıyor...",
-            Toast.LENGTH_SHORT
+            "4 dakika 30 saniyelik müzik hazırlanıyor...",
+            Toast.LENGTH_LONG
         ).show()
 
         musicWebView.evaluateJavascript(
             "javascript:generateMusic(" +
-                    JSONObjectEscape(userPrompt) +
+                    JSONObjectEscape(
+                        userPrompt
+                    ) +
                     ")",
             null
         )
@@ -335,7 +359,10 @@ class MainActivity : Activity() {
         val file =
             generatedAudioFile
 
-        if (file == null || !file.exists()) {
+        if (
+            file == null ||
+            !file.exists()
+        ) {
 
             Toast.makeText(
                 this,
@@ -372,7 +399,9 @@ class MainActivity : Activity() {
 
             } else {
 
-                if (mediaPlayer?.isPlaying == false) {
+                if (
+                    mediaPlayer?.isPlaying == false
+                ) {
 
                     mediaPlayer?.start()
                 }
@@ -470,7 +499,8 @@ class MainActivity : Activity() {
         val sourceFile =
             generatedAudioFile
 
-        if (sourceFile == null ||
+        if (
+            sourceFile == null ||
             !sourceFile.exists()
         ) {
 
@@ -501,7 +531,8 @@ class MainActivity : Activity() {
                         "audio/wav"
                     )
 
-                    if (Build.VERSION.SDK_INT >=
+                    if (
+                        Build.VERSION.SDK_INT >=
                         Build.VERSION_CODES.Q
                     ) {
 
@@ -529,15 +560,22 @@ class MainActivity : Activity() {
                 return
             }
 
-            resolver.openOutputStream(uri).use { output ->
+            resolver
+                .openOutputStream(uri)
+                .use { output ->
 
-                sourceFile.inputStream().use { input ->
+                    sourceFile
+                        .inputStream()
+                        .use { input ->
 
-                    input.copyTo(output!!)
+                            input.copyTo(
+                                output!!
+                            )
+                        }
                 }
-            }
 
-            if (Build.VERSION.SDK_INT >=
+            if (
+                Build.VERSION.SDK_INT >=
                 Build.VERSION_CODES.Q
             ) {
 
@@ -560,7 +598,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Müzik telefona kaydedildi.",
+                "4 dakika 30 saniyelik müzik telefona kaydedildi.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -573,6 +611,240 @@ class MainActivity : Activity() {
                 Toast.LENGTH_LONG
             ).show()
         }
+    }
+
+    private fun createFinalWav() {
+
+        if (audioChunks.isEmpty()) {
+
+            Toast.makeText(
+                this,
+                "Müzik parçaları bulunamadı.",
+                Toast.LENGTH_LONG
+            ).show()
+
+            return
+        }
+
+        try {
+
+            val targetSamples =
+                audioSampleRate *
+                        270
+
+            val targetBytes =
+                targetSamples * 2
+
+            val combined =
+                ByteArrayOutputStream()
+
+            for (
+                chunk in audioChunks
+            ) {
+
+                combined.write(chunk)
+            }
+
+            var pcm =
+                combined.toByteArray()
+
+            if (
+                pcm.size > targetBytes
+            ) {
+
+                pcm =
+                    pcm.copyOf(
+                        targetBytes
+                    )
+
+            } else if (
+                pcm.size < targetBytes
+            ) {
+
+                val padded =
+                    ByteArray(
+                        targetBytes
+                    )
+
+                System.arraycopy(
+                    pcm,
+                    0,
+                    padded,
+                    0,
+                    pcm.size
+                )
+
+                pcm = padded
+            }
+
+            val finalFile =
+                File(
+                    cacheDir,
+                    "nova_music_4m30s.wav"
+                )
+
+            FileOutputStream(
+                finalFile
+            ).use { output ->
+
+                writeWavHeader(
+                    output,
+                    pcm.size,
+                    audioSampleRate
+                )
+
+                output.write(pcm)
+            }
+
+            generatedAudioFile =
+                finalFile
+
+            mediaPlayer?.release()
+
+            mediaPlayer =
+                MediaPlayer()
+
+            mediaPlayer?.setDataSource(
+                finalFile.absolutePath
+            )
+
+            mediaPlayer?.prepare()
+
+            mediaPlayer?.start()
+
+            Toast.makeText(
+                this,
+                "4 dakika 30 saniyelik müzik hazır ve çalıyor.",
+                Toast.LENGTH_LONG
+            ).show()
+
+        } catch (error: Exception) {
+
+            Toast.makeText(
+                this,
+                "Müzik birleştirme hatası: " +
+                        error.message,
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun writeWavHeader(
+        output: FileOutputStream,
+        pcmSize: Int,
+        sampleRate: Int
+    ) {
+
+        val header =
+            ByteArray(44)
+
+        header[0] = 'R'.code.toByte()
+        header[1] = 'I'.code.toByte()
+        header[2] = 'F'.code.toByte()
+        header[3] = 'F'.code.toByte()
+
+        writeIntLE(
+            header,
+            4,
+            36 + pcmSize
+        )
+
+        header[8] = 'W'.code.toByte()
+        header[9] = 'A'.code.toByte()
+        header[10] = 'V'.code.toByte()
+        header[11] = 'E'.code.toByte()
+
+        header[12] = 'f'.code.toByte()
+        header[13] = 'm'.code.toByte()
+        header[14] = 't'.code.toByte()
+        header[15] = ' '.code.toByte()
+
+        writeIntLE(
+            header,
+            16,
+            16
+        )
+
+        writeShortLE(
+            header,
+            20,
+            1
+        )
+
+        writeShortLE(
+            header,
+            22,
+            1
+        )
+
+        writeIntLE(
+            header,
+            24,
+            sampleRate
+        )
+
+        writeIntLE(
+            header,
+            28,
+            sampleRate * 2
+        )
+
+        writeShortLE(
+            header,
+            32,
+            2
+        )
+
+        writeShortLE(
+            header,
+            34,
+            16
+        )
+
+        header[36] = 'd'.code.toByte()
+        header[37] = 'a'.code.toByte()
+        header[38] = 't'.code.toByte()
+        header[39] = 'a'.code.toByte()
+
+        writeIntLE(
+            header,
+            40,
+            pcmSize
+        )
+
+        output.write(header)
+    }
+
+    private fun writeIntLE(
+        data: ByteArray,
+        offset: Int,
+        value: Int
+    ) {
+
+        data[offset] =
+            (value and 0xff).toByte()
+
+        data[offset + 1] =
+            ((value shr 8) and 0xff).toByte()
+
+        data[offset + 2] =
+            ((value shr 16) and 0xff).toByte()
+
+        data[offset + 3] =
+            ((value shr 24) and 0xff).toByte()
+    }
+
+    private fun writeShortLE(
+        data: ByteArray,
+        offset: Int,
+        value: Int
+    ) {
+
+        data[offset] =
+            (value and 0xff).toByte()
+
+        data[offset + 1] =
+            ((value shr 8) and 0xff).toByte()
     }
 
     inner class MusicGenBridge {
@@ -588,6 +860,91 @@ class MainActivity : Activity() {
                     this@MainActivity,
                     message,
                     Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicChunk(
+            base64Audio: String,
+            chunkIndex: Int,
+            totalChunksFromJs: Int,
+            sampleRate: Int
+        ) {
+
+            runOnUiThread {
+
+                try {
+
+                    audioSampleRate =
+                        sampleRate
+
+                    val audioBytes =
+                        Base64.decode(
+                            base64Audio,
+                            Base64.DEFAULT
+                        )
+
+                    if (
+                        audioBytes.size <= 44
+                    ) {
+
+                        return@runOnUiThread
+                    }
+
+                    val pcm =
+                        audioBytes.copyOfRange(
+                            44,
+                            audioBytes.size
+                        )
+
+                    audioChunks.add(
+                        pcm
+                    )
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Bölüm " +
+                                (chunkIndex + 1) +
+                                " / " +
+                                totalChunksFromJs +
+                                " tamamlandı.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                } catch (error: Exception) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Parça işleme hatası: " +
+                                error.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicComplete() {
+
+            runOnUiThread {
+
+                createFinalWav()
+            }
+        }
+
+        @JavascriptInterface
+        fun onMusicError(
+            message: String
+        ) {
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "MusicGen hatası: " +
+                            message,
+                    Toast.LENGTH_LONG
                 ).show()
             }
         }
@@ -692,7 +1049,9 @@ class MainActivity : Activity() {
 
         return (
             value *
-                    resources.displayMetrics.density
+                    resources
+                        .displayMetrics
+                        .density
         ).toInt()
     }
 
