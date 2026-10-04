@@ -20,7 +20,7 @@ let model = null;
 let loading = false;
 let generating = false;
 
-const TOTAL_CHUNKS = 1;
+const TOTAL_CHUNKS = 3;
 
 function sendStatus(message) {
 
@@ -409,7 +409,7 @@ window.generateMusic =
                 promptText.trim();
 
             sendStatus(
-                "30 saniyelik müzik oluşturuluyor..."
+                "Yaklaşık 30 saniyelik müzik hazırlanıyor..."
             );
 
             const inputs =
@@ -423,69 +423,80 @@ window.generateMusic =
                     .audio_encoder
                     .sampling_rate;
 
-            sendStatus(
-                "30 saniyelik müzik üretiliyor..."
-            );
-
-            const audioValues =
-                await model.generate({
-
-                    ...inputs,
-
-                    max_new_tokens: 1500,
-
-                    do_sample: true,
-
-                    guidance_scale: 3
-                });
-
-            let audioData =
-                audioValues;
-
-            if (
-                audioValues &&
-                audioValues.data
+            for (
+                let chunkIndex = 0;
+                chunkIndex < TOTAL_CHUNKS;
+                chunkIndex++
             ) {
 
-                audioData =
-                    audioValues.data;
-            }
-
-            if (
-                !audioData ||
-                !audioData.length
-            ) {
-
-                throw new Error(
-                    "MusicGen ses verisi oluşturmadı."
-                );
-            }
-
-            const wavBase64 =
-                floatToWavBase64(
-                    audioData,
-                    sampleRate
+                sendStatus(
+                    "Müzik bölümü " +
+                    (chunkIndex + 1) +
+                    " / " +
+                    TOTAL_CHUNKS +
+                    " üretiliyor..."
                 );
 
-            if (
-                window.AndroidBridge
-            ) {
+                const audioValues =
+                    await model.generate({
 
-                window.AndroidBridge.onMusicChunk(
-                    wavBase64,
-                    0,
-                    1,
-                    sampleRate
+                        ...inputs,
+
+                        max_new_tokens: 500,
+
+                        do_sample: true,
+
+                        guidance_scale: 3
+                    });
+
+                let audioData =
+                    audioValues;
+
+                if (
+                    audioValues &&
+                    audioValues.data
+                ) {
+
+                    audioData =
+                        audioValues.data;
+                }
+
+                if (
+                    !audioData ||
+                    !audioData.length
+                ) {
+
+                    throw new Error(
+                        "MusicGen ses verisi oluşturmadı."
+                    );
+                }
+
+                const wavBase64 =
+                    floatToWavBase64(
+                        audioData,
+                        sampleRate
+                    );
+
+                if (
+                    window.AndroidBridge
+                ) {
+
+                    window.AndroidBridge.onMusicChunk(
+                        wavBase64,
+                        chunkIndex,
+                        TOTAL_CHUNKS,
+                        sampleRate
+                    );
+                }
+
+                await new Promise(
+                    resolve =>
+                        setTimeout(
+                            resolve,
+                            150
+                        )
                 );
             }
-
-            await new Promise(
-                resolve =>
-                    setTimeout(
-                        resolve,
-                        150
-                    )
-            );
 
             if (
                 window.AndroidBridge
@@ -496,7 +507,7 @@ window.generateMusic =
             }
 
             sendStatus(
-                "30 saniyelik müzik hazır."
+                "Yaklaşık 30 saniyelik müzik hazır."
             );
 
         } catch (error) {
