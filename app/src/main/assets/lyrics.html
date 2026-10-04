@@ -241,7 +241,7 @@
 
             setStatus(
                 "🧠 NOVA şarkı sözü yapay zekâsı hazırlanıyor...\n\n" +
-                "İlk kullanımda yaklaşık 483 MB model indirilecek.\n" +
+                "İlk kullanımda model telefona indiriliyor.\n" +
                 "Lütfen uygulamayı kapatma.",
                 "loading"
             );
@@ -313,90 +313,19 @@
         }
 
 
-        function isValidLyrics(text) {
+        /*
+         * Modelin çıktısını gereksiz yere reddetmiyoruz.
+         *
+         * Önceki sürümde fazla katı kontrol vardı.
+         */
+        function isUsableLyrics(text) {
 
             if (!text) {
                 return false;
             }
 
 
-            if (text.length < 100) {
-                return false;
-            }
-
-
-            const lower =
-                text.toLocaleLowerCase("tr-TR");
-
-
-            const forbidden = [
-
-                "yapay zekâ",
-                "yapay zeka",
-                "model",
-                "ödeme",
-                "size yardımcı",
-                "yardımcı olmak",
-                "bu yazıda",
-                "şarkı sözü yazacağım",
-                "şarkı sözleri yazacağım",
-                "kullanıcı",
-                "sistem",
-                "asistan",
-                "türkçe söndürüyoruz",
-                "kubra"
-
-            ];
-
-
-            for (const word of forbidden) {
-
-                if (lower.includes(word)) {
-                    return false;
-                }
-            }
-
-
-            const sections = [
-
-                "[kıta",
-                "[nakarat",
-                "[köprü",
-                "[son nakarat",
-                "kıta 1",
-                "nakarat",
-                "köprü"
-
-            ];
-
-
-            let sectionCount = 0;
-
-
-            for (const section of sections) {
-
-                if (lower.includes(section)) {
-                    sectionCount++;
-                }
-            }
-
-
-            const lineCount =
-                text
-                    .split("\n")
-                    .filter(
-                        line =>
-                            line.trim().length > 0
-                    )
-                    .length;
-
-
-            if (lineCount < 8) {
-                return false;
-            }
-
-
-            if (sectionCount < 2) {
+            if (text.length < 40) {
                 return false;
             }
 
@@ -448,35 +377,29 @@
 
                 const messages = [
 
-
                     {
                         role: "system",
 
                         content:
-                            "Sen profesyonel bir Türkçe pop şarkı sözleri yazarıısın. " +
-                            "Sadece özgün Türkçe şarkı sözü üret. " +
-                            "Açıklama yazma. " +
-                            "Kullanıcıya cevap verme. " +
-                            "Yapay zekâdan, modelden, sistemden veya teknik konulardan bahsetme. " +
-                            "Şarkı şu sırayla olsun: " +
-                            "[Kıta 1], [Nakarat], [Kıta 2], [Nakarat], [Köprü], [Son Nakarat]. " +
-                            "Her bölümde gerçek ve anlamlı Türkçe dizeler olsun. " +
-                            "Nakarat akılda kalıcı ve tekrar edilebilir olsun. " +
-                            "Sözler duygusal olarak tutarlı olsun. " +
-                            "Konu dışına çıkma."
+                            "Sen Türkçe şarkı sözleri yazan profesyonel bir söz yazarısın. " +
+                            "Kullanıcının verdiği konu hakkında özgün bir Türkçe şarkı yaz. " +
+                            "Şarkı sözleri doğal, anlaşılır ve duygusal olsun. " +
+                            "Kıta ve nakarat yapısı kullan. " +
+                            "Nakarat akılda kalıcı olsun. " +
+                            "Sadece şarkı sözlerini yaz. " +
+                            "Açıklama yapma. " +
+                            "Yapay zekâdan veya sistemden bahsetme."
                     },
-
 
                     {
                         role: "user",
 
                         content:
-                            "Şu konu hakkında Türkçe pop şarkısı yaz:\n\n" +
+                            "Şarkının konusu:\n" +
                             userPrompt +
                             "\n\n" +
-                            "Şarkıya doğrudan [Kıta 1] ile başla. " +
-                            "En az 8-10 bölüm/dize üret. " +
-                            "Finalde [Son Nakarat] ile güçlü şekilde bitir."
+                            "Bu konuya uygun Türkçe bir şarkı sözü yaz. " +
+                            "En az 4 bölüm ve güçlü bir nakarat oluştur."
                     }
 
                 ];
@@ -486,11 +409,11 @@
                     await generator(
                         messages,
                         {
-                            max_new_tokens: 320,
+                            max_new_tokens: 350,
                             do_sample: true,
-                            temperature: 0.75,
+                            temperature: 0.8,
                             top_p: 0.9,
-                            repetition_penalty: 1.12
+                            repetition_penalty: 1.08
                         }
                     );
 
@@ -503,10 +426,14 @@
                     cleanLyrics(lyrics);
 
 
-                if (!isValidLyrics(lyrics)) {
+                /*
+                 * Eğer model boş çıktı verdiyse hata ver.
+                 * Bunun dışında modelin gerçek çıktısını göster.
+                 */
+                if (!isUsableLyrics(lyrics)) {
 
                     throw new Error(
-                        "Yapay zekâ düzgün bir Türkçe şarkı sözü oluşturamadı. Lütfen tekrar dene."
+                        "Yapay zekâ boş veya çok kısa bir çıktı verdi. Lütfen tekrar dene."
                     );
                 }
 
@@ -516,7 +443,7 @@
 
 
                 setStatus(
-                    "✅ Şarkı sözleri başarıyla oluşturuldu.",
+                    "✅ Şarkı sözleri oluşturuldu.",
                     "success"
                 );
 
@@ -573,7 +500,6 @@
                         message
                     );
                 }
-
 
             }
             finally {
