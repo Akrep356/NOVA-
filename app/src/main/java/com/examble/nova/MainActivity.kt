@@ -36,6 +36,8 @@ class MainActivity : Activity() {
 
     private lateinit var mainRoot: LinearLayout
 
+    private var mainPrompt: EditText? = null
+
     private val audioChunks =
         ArrayList<ByteArray>()
 
@@ -124,6 +126,8 @@ class MainActivity : Activity() {
         )
 
         val prompt = EditText(this)
+
+        mainPrompt = prompt
 
         prompt.hint =
             "Nasıl bir şarkı oluşturmak istiyorsun?"
@@ -449,6 +453,51 @@ class MainActivity : Activity() {
                 ).show()
             }
         }
+
+        @JavascriptInterface
+        fun onLyricsMusicRequested(
+            lyrics: String
+        ) {
+
+            runOnUiThread {
+
+                val cleanLyrics =
+                    lyrics.trim()
+
+                if (cleanLyrics.isEmpty()) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Şarkı sözleri boş.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    return@runOnUiThread
+                }
+
+                mainPrompt?.setText(
+                    cleanLyrics
+                )
+
+                lyricsWebView?.destroy()
+
+                lyricsWebView = null
+
+                setContentView(
+                    mainRoot
+                )
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "Şarkı sözleri müzik sistemine gönderildi.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                generateMusic(
+                    cleanLyrics
+                )
+            }
+        }
     }
 
     // =============================================================
@@ -512,6 +561,10 @@ class MainActivity : Activity() {
             null
         )
     }
+
+    // =============================================================
+    // MÜZİK OYNAT
+    // =============================================================
 
     private fun playMusic() {
 
@@ -583,6 +636,10 @@ class MainActivity : Activity() {
         }
     }
 
+    // =============================================================
+    // DURAKLAT / DEVAM ET
+    // =============================================================
+
     private fun pauseResumeMusic() {
 
         val player =
@@ -633,6 +690,10 @@ class MainActivity : Activity() {
         }
     }
 
+    // =============================================================
+    // DURDUR
+    // =============================================================
+
     private fun stopMusic() {
 
         try {
@@ -654,7 +715,7 @@ class MainActivity : Activity() {
     }
 
     // =============================================================
-    // MÜZİĞİ TELEFONA KAYDET
+    // TELEFONA KAYDET
     // =============================================================
 
     private fun saveMusicToPhone() {
@@ -777,7 +838,7 @@ class MainActivity : Activity() {
     }
 
     // =============================================================
-    // 4 DAKİKA 30 SANİYELİK WAV OLUŞTUR
+    // 4 DAKİKA 30 SANİYELİK WAV
     // =============================================================
 
     private fun createFinalWav() {
@@ -1250,7 +1311,9 @@ class MainActivity : Activity() {
 
             lyricsWebView = null
 
-            setContentView(mainRoot)
+            setContentView(
+                mainRoot
+            )
 
             return
         }
