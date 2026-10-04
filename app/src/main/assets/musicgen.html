@@ -409,7 +409,7 @@ window.generateMusic =
                 promptText.trim();
 
             sendStatus(
-                "Müzik oluşturuluyor..."
+                "30 saniyelik müzik oluşturuluyor..."
             );
 
             const inputs =
@@ -424,7 +424,7 @@ window.generateMusic =
                     .sampling_rate;
 
             sendStatus(
-                "Müzik üretiliyor..."
+                "30 saniyelik müzik üretiliyor..."
             );
 
             const audioValues =
@@ -432,7 +432,7 @@ window.generateMusic =
 
                     ...inputs,
 
-                    max_new_tokens: 500,
+                    max_new_tokens: 1500,
 
                     do_sample: true,
 
@@ -496,7 +496,7 @@ window.generateMusic =
             }
 
             sendStatus(
-                "Müzik hazır."
+                "30 saniyelik müzik hazır."
             );
 
         } catch (error) {
