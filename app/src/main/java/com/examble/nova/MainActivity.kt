@@ -142,7 +142,190 @@ class MainActivity : Activity() {
                 dp(130)
             )
         )
+        val lyricsButton = Button(this)
 
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+val lyricsButton = Button(this)
+
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+val lyricsButton = Button(this)
+
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+val lyricsButton = Button(this)
+
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+
+val lyricsButton = Button(this)
+
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+val lyricsButton = Button(this)
+
+lyricsButton.text =
+    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+lyricsButton.setOnClickListener {
+
+    val lyricsWebView = WebView(this)
+
+    lyricsWebView.settings.javaScriptEnabled = true
+    lyricsWebView.settings.domStorageEnabled = true
+
+    lyricsWebView.loadUrl(
+        "file:///android_asset/lyrics.html"
+    )
+
+    setContentView(lyricsWebView)
+}
+
+root.addView(
+    lyricsButton,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(55)
+    )
+)
+        
+     val lyricsButton = Button(this)
+     lricsButton.text = "🎤 ŞARKI SÖZÜ OLUŞTUR"
+
+     lricsButton.setOnClickListener {
+         val lyricsWebView = WebView(this)
+
+     lyricsWebView.settings.javaScriptEnabled = true
+
+     lyricsWebView.settings.domStorageEnabled = true
+
+         lyricsWebView.loadUrl(
+     "file:///android_asset/lyrics.html"
+         )
+
+         setContentView(lyricsWebView)
+     }
+
+     root.addView(
+         lyricsButton,
+         LinearLayout.LayoutParams(
+
+     ViewGroup.LayoutParams.MATCH_PARENT,
+             dp(55)
+         )
+     )
+        
         val musicButton =
             Button(this)
 
