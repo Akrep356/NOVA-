@@ -43,10 +43,6 @@ class MainActivity : Activity() {
 
     private var audioSampleRate = 32000
 
-    private val chunkDurationSeconds = 10
-
-    private val totalChunks = 27
-
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -465,9 +461,7 @@ class MainActivity : Activity() {
                 val cleanLyrics =
                     lyrics.trim()
 
-                if (
-                    cleanLyrics.isEmpty()
-                ) {
+                if (cleanLyrics.isEmpty()) {
 
                     Toast.makeText(
                         this@MainActivity,
@@ -551,7 +545,7 @@ class MainActivity : Activity() {
 
         Toast.makeText(
             this,
-            "4 dakika 30 saniyelik müzik hazırlanıyor...",
+            "Müzik hazırlanıyor...",
             Toast.LENGTH_LONG
         ).show()
 
@@ -825,7 +819,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "4 dakika 30 saniyelik müzik telefona kaydedildi.",
+                "Müzik telefona kaydedildi.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -841,7 +835,7 @@ class MainActivity : Activity() {
     }
 
     // =============================================================
-    // 4 DAKİKA 30 SANİYELİK WAV
+    // TEK PARÇA WAV OLUŞTUR
     // =============================================================
 
     private fun createFinalWav() {
@@ -861,12 +855,6 @@ class MainActivity : Activity() {
 
         try {
 
-            val targetSamples =
-                audioSampleRate * 270
-
-            val targetBytes =
-                targetSamples * 2
-
             val combined =
                 ByteArrayOutputStream()
 
@@ -879,42 +867,26 @@ class MainActivity : Activity() {
                 )
             }
 
-            var pcm =
+            val pcm =
                 combined.toByteArray()
 
             if (
-                pcm.size > targetBytes
+                pcm.isEmpty()
             ) {
 
-                pcm =
-                    pcm.copyOf(
-                        targetBytes
-                    )
+                Toast.makeText(
+                    this,
+                    "Ses verisi boş.",
+                    Toast.LENGTH_LONG
+                ).show()
 
-            } else if (
-                pcm.size < targetBytes
-            ) {
-
-                val padded =
-                    ByteArray(
-                        targetBytes
-                    )
-
-                System.arraycopy(
-                    pcm,
-                    0,
-                    padded,
-                    0,
-                    pcm.size
-                )
-
-                pcm = padded
+                return
             }
 
             val finalFile =
                 File(
                     cacheDir,
-                    "nova_music_4m30s.wav"
+                    "nova_music.wav"
                 )
 
             FileOutputStream(
@@ -950,7 +922,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "4 dakika 30 saniyelik müzik hazır ve çalıyor.",
+                "Müzik hazır ve çalıyor.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -958,7 +930,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Müzik birleştirme hatası: " +
+                "Müzik oluşturma hatası: " +
                         error.message,
                 Toast.LENGTH_LONG
             ).show()
@@ -1165,10 +1137,8 @@ class MainActivity : Activity() {
 
                         Toast.makeText(
                             this@MainActivity,
-                            "Bölüm " +
-                                    (chunkIndex + 1) +
-                                    " boş geldi.",
-                            Toast.LENGTH_SHORT
+                            "Müzik verisi boş geldi.",
+                            Toast.LENGTH_LONG
                         ).show()
 
                         return@runOnUiThread
@@ -1180,230 +1150,18 @@ class MainActivity : Activity() {
                             audioBytes.size
                         )
 
+                    audioChunks.clear()
+
                     audioChunks.add(
                         pcm
                     )
 
                     Toast.makeText(
                         this@MainActivity,
-                        "Bölüm " +
-                                (chunkIndex + 1) +
-                                " / " +
-                                totalChunksFromJs +
-                                " tamamlandı.",
+                        "Müzik verisi alındı.",
                         Toast.LENGTH_SHORT
                     ).show()
 
                 } catch (error: Exception) {
 
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Parça işleme hatası: " +
-                                error.message,
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-
-        @JavascriptInterface
-        fun onMusicComplete() {
-
-            runOnUiThread {
-
-                if (
-                    audioChunks.size <
-                    totalChunks
-                ) {
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Müzik tamamlanamadı. " +
-                                audioChunks.size +
-                                " / " +
-                                totalChunks +
-                                " bölüm alındı.",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    return@runOnUiThread
-                }
-
-                createFinalWav()
-            }
-        }
-
-        @JavascriptInterface
-        fun onMusicError(
-            message: String
-        ) {
-
-            runOnUiThread {
-
-                Toast.makeText(
-                    this@MainActivity,
-                    "MusicGen hatası: " +
-                            message,
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-
-        @JavascriptInterface
-        fun onMusicGenerated(
-            base64Audio: String
-        ) {
-
-            runOnUiThread {
-
-                try {
-
-                    val audioBytes =
-                        Base64.decode(
-                            base64Audio,
-                            Base64.DEFAULT
-                        )
-
-                    val audioFile =
-                        File(
-                            cacheDir,
-                            "nova_music.wav"
-                        )
-
-                    FileOutputStream(
-                        audioFile
-                    ).use { output ->
-
-                        output.write(
-                            audioBytes
-                        )
-                    }
-
-                    generatedAudioFile =
-                        audioFile
-
-                    mediaPlayer?.release()
-
-                    mediaPlayer =
-                        MediaPlayer()
-
-                    mediaPlayer?.setDataSource(
-                        audioFile.absolutePath
-                    )
-
-                    mediaPlayer?.prepare()
-
-                    mediaPlayer?.start()
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Müzik hazır ve çalıyor.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                } catch (error: Exception) {
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Ses oynatma hatası: " +
-                                error.message,
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-    }
-
-    // =============================================================
-    // JAVASCRIPT ESCAPE
-    // =============================================================
-
-    private fun JSONObjectEscape(
-        text: String
-    ): String {
-
-        return "\"" +
-                text
-                    .replace(
-                        "\\",
-                        "\\\\"
-                    )
-                    .replace(
-                        "\"",
-                        "\\\""
-                    )
-                    .replace(
-                        "\n",
-                        "\\n"
-                    )
-                    .replace(
-                        "\r",
-                        "\\r"
-                    )
-                    .replace(
-                        "\t",
-                        "\\t"
-                    ) +
-                "\""
-    }
-
-    // =============================================================
-    // DP
-    // =============================================================
-
-    private fun dp(
-        value: Int
-    ): Int {
-
-        return (
-            value *
-                    resources
-                        .displayMetrics
-                        .density
-        ).toInt()
-    }
-
-    // =============================================================
-    // GERİ TUŞU
-    // =============================================================
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-
-        if (
-            lyricsWebView != null
-        ) {
-
-            lyricsWebView?.destroy()
-
-            lyricsWebView = null
-
-            setContentView(
-                mainRoot
-            )
-
-            return
-        }
-
-        super.onBackPressed()
-    }
-
-    // =============================================================
-    // DESTROY
-    // =============================================================
-
-    override fun onDestroy() {
-
-        mediaPlayer?.release()
-
-        mediaPlayer = null
-
-        musicWebView.destroy()
-
-        lyricsWebView?.destroy()
-
-        lyricsWebView = null
-
-        super.onDestroy()
-    }
-}
+                    Toast
