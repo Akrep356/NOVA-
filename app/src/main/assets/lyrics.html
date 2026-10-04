@@ -4,9 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NOVA Şarkı Sözleri</title>
+
+    <style>
+        body {
+            background: #111318;
+            color: white;
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: #1c1f26;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: 0;
+            border-radius: 10px;
+            background: #7c4dff;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        #status {
+            margin-top: 15px;
+            color: #bbbbbb;
+            text-align: center;
+        }
+
+        #result {
+            margin-top: 15px;
+            min-height: 250px;
+        }
+    </style>
 </head>
 
 <body>
+
+<h2>🎵 NOVA Şarkı Sözleri</h2>
+
+<textarea
+    id="prompt"
+    rows="4"
+    placeholder="Şarkının konusu ve tarzını yaz...
+Örnek: Aşkını kaybeden birinin yeniden umut bulması, Türkçe pop">
+</textarea>
+
+<button onclick="generateLyrics()">
+    🎤 ŞARKI SÖZÜ OLUŞTUR
+</button>
+
+<div id="status">Hazır</div>
+
+<textarea
+    id="result"
+    rows="14"
+    placeholder="Oluşturulan şarkı sözleri burada görünecek..."
+></textarea>
 
 <script type="module">
 
@@ -21,67 +89,126 @@ async function loadModel() {
         return;
     }
 
-    if (window.AndroidBridge) {
-        AndroidBridge.onLyricsStatus("Şarkı sözü yapay zekâsı yükleniyor...");
-    }
+    document.getElementById("status").innerText =
+        "Yapay zekâ modeli yükleniyor...";
 
     generator = await pipeline(
         "text2text-generation",
-        "Xenova/mt5-small"
+        "Xenova/mt5-small",
+        {
+            dtype: "q8"
+        }
     );
-
-    if (window.AndroidBridge) {
-        AndroidBridge.onLyricsStatus("Şarkı sözü yapay zekâsı hazır.");
-    }
 }
 
-window.generateLyrics = async function(topic, style) {
+window.generateLyrics = async function() {
+
+    const prompt =
+        document.getElementById("prompt").value.trim();
+
+    if (!prompt) {
+
+        document.getElementById("status").innerText =
+            "Lütfen şarkının konusunu yaz.";
+
+        return;
+    }
 
     try {
 
         await loadModel();
 
-        if (window.AndroidBridge) {
-            AndroidBridge.onLyricsStatus(
-                "Şarkı sözleri oluşturuluyor..."
-            );
-        }
+        document.getElementById("status").innerText =
+            "Şarkı sözleri oluşturuluyor...";
 
-        const prompt =
-            "Türkçe bir şarkı yaz. " +
-            "Şarkının konusu: " + topic + ". " +
-            "Müzik tarzı: " + style + ". " +
-            "Şarkıda 2 kıta, 2 nakarat ve 1 köprü olsun. " +
-            "Duygusal ve anlamlı Türkçe sözler kullan. " +
-            "Şarkı sözlerini düzenli biçimde yaz.";
+        const instruction = `
+Türkçe bir şarkı yaz.
 
-        const result = await generator(prompt, {
-            max_new_tokens: 300,
-            do_sample: true
-        });
+Konu ve tarz:
+${prompt}
+
+Şarkı yapısı:
+
+[Kıta 1]
+4 satır
+
+[Nakarat]
+4 satır
+
+[Kıta 2]
+4 satır
+
+[Nakarat]
+4 satır
+
+[Köprü]
+4 satır
+
+[Son Nakarat]
+4 satır
+
+Kurallar:
+- Türkçe yaz.
+- Anlamlı ve akıcı olsun.
+- Aynı cümleleri gereksiz yere tekrarlama.
+- Şarkı sözü formatını koru.
+- Kafiye ve ritme dikkat et.
+- Açıklama yazma, sadece şarkı sözlerini yaz.
+`;
+
+        const output = await generator(
+            instruction,
+            {
+                max_new_tokens: 450,
+                do_sample: true,
+                temperature: 0.9
+            }
+        );
 
         let lyrics = "";
 
-        if (result && result.length > 0) {
-            lyrics = result[0].generated_text || "";
+        if (
+            output &&
+            output[0] &&
+            output[0].generated_text
+        ) {
+            lyrics = output[0].generated_text;
         }
 
         if (!lyrics) {
-            throw new Error("Şarkı sözü üretilemedi.");
+            throw new Error(
+                "Şarkı sözü oluşturulamadı."
+            );
         }
 
-        if (window.AndroidBridge) {
-            AndroidBridge.onLyricsGenerated(lyrics);
-            AndroidBridge.onLyricsStatus(
-                "Şarkı sözleri hazır."
+        document.getElementById("result").value =
+            lyrics.trim();
+
+        document.getElementById("status").innerText =
+            "✅ Şarkı sözleri hazır.";
+
+        if (
+            typeof AndroidBridge !== "undefined" &&
+            AndroidBridge.onLyricsGenerated
+        ) {
+            AndroidBridge.onLyricsGenerated(
+                lyrics.trim()
             );
         }
 
     } catch (error) {
 
-        if (window.AndroidBridge) {
+        console.error(error);
+
+        document.getElementById("status").innerText =
+            "❌ Hata: " + error.message;
+
+        if (
+            typeof AndroidBridge !== "undefined" &&
+            AndroidBridge.onLyricsError
+        ) {
             AndroidBridge.onLyricsError(
-                error.message || "Bilinmeyen hata"
+                error.message
             );
         }
     }
