@@ -157,7 +157,8 @@ class MainActivity : Activity() {
         // AI ŞARKI SÖZÜ OLUŞTUR
         // =========================================================
 
-        val lyricsButton = Button(this)
+        val lyricsButton =
+            Button(this)
 
         lyricsButton.text =
             "🎤 ŞARKI SÖZÜ OLUŞTUR"
@@ -464,7 +465,9 @@ class MainActivity : Activity() {
                 val cleanLyrics =
                     lyrics.trim()
 
-                if (cleanLyrics.isEmpty()) {
+                if (
+                    cleanLyrics.isEmpty()
+                ) {
 
                     Toast.makeText(
                         this@MainActivity,
@@ -843,7 +846,9 @@ class MainActivity : Activity() {
 
     private fun createFinalWav() {
 
-        if (audioChunks.isEmpty()) {
+        if (
+            audioChunks.isEmpty()
+        ) {
 
             Toast.makeText(
                 this,
@@ -869,7 +874,9 @@ class MainActivity : Activity() {
                 chunk in audioChunks
             ) {
 
-                combined.write(chunk)
+                combined.write(
+                    chunk
+                )
             }
 
             var pcm =
@@ -920,7 +927,9 @@ class MainActivity : Activity() {
                     audioSampleRate
                 )
 
-                output.write(pcm)
+                output.write(
+                    pcm
+                )
             }
 
             generatedAudioFile =
@@ -969,10 +978,17 @@ class MainActivity : Activity() {
         val header =
             ByteArray(44)
 
-        header[0] = 'R'.code.toByte()
-        header[1] = 'I'.code.toByte()
-        header[2] = 'F'.code.toByte()
-        header[3] = 'F'.code.toByte()
+        header[0] =
+            'R'.code.toByte()
+
+        header[1] =
+            'I'.code.toByte()
+
+        header[2] =
+            'F'.code.toByte()
+
+        header[3] =
+            'F'.code.toByte()
 
         writeIntLE(
             header,
@@ -980,15 +996,29 @@ class MainActivity : Activity() {
             36 + pcmSize
         )
 
-        header[8] = 'W'.code.toByte()
-        header[9] = 'A'.code.toByte()
-        header[10] = 'V'.code.toByte()
-        header[11] = 'E'.code.toByte()
+        header[8] =
+            'W'.code.toByte()
 
-        header[12] = 'f'.code.toByte()
-        header[13] = 'm'.code.toByte()
-        header[14] = 't'.code.toByte()
-        header[15] = ' '.code.toByte()
+        header[9] =
+            'A'.code.toByte()
+
+        header[10] =
+            'V'.code.toByte()
+
+        header[11] =
+            'E'.code.toByte()
+
+        header[12] =
+            'f'.code.toByte()
+
+        header[13] =
+            'm'.code.toByte()
+
+        header[14] =
+            't'.code.toByte()
+
+        header[15] =
+            ' '.code.toByte()
 
         writeIntLE(
             header,
@@ -1032,10 +1062,17 @@ class MainActivity : Activity() {
             16
         )
 
-        header[36] = 'd'.code.toByte()
-        header[37] = 'a'.code.toByte()
-        header[38] = 't'.code.toByte()
-        header[39] = 'a'.code.toByte()
+        header[36] =
+            'd'.code.toByte()
+
+        header[37] =
+            'a'.code.toByte()
+
+        header[38] =
+            't'.code.toByte()
+
+        header[39] =
+            'a'.code.toByte()
 
         writeIntLE(
             header,
@@ -1043,7 +1080,9 @@ class MainActivity : Activity() {
             pcmSize
         )
 
-        output.write(header)
+        output.write(
+            header
+        )
     }
 
     private fun writeIntLE(
@@ -1124,6 +1163,14 @@ class MainActivity : Activity() {
                         audioBytes.size <= 44
                     ) {
 
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Bölüm " +
+                                    (chunkIndex + 1) +
+                                    " boş geldi.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
                         return@runOnUiThread
                     }
 
@@ -1163,6 +1210,24 @@ class MainActivity : Activity() {
         fun onMusicComplete() {
 
             runOnUiThread {
+
+                if (
+                    audioChunks.size <
+                    totalChunks
+                ) {
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Müzik tamamlanamadı. " +
+                                audioChunks.size +
+                                " / " +
+                                totalChunks +
+                                " bölüm alındı.",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    return@runOnUiThread
+                }
 
                 createFinalWav()
             }
@@ -1305,7 +1370,9 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
 
-        if (lyricsWebView != null) {
+        if (
+            lyricsWebView != null
+        ) {
 
             lyricsWebView?.destroy()
 
