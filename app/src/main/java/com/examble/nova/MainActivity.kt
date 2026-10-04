@@ -32,6 +32,10 @@ class MainActivity : Activity() {
 
     private lateinit var musicWebView: WebView
 
+    private var lyricsWebView: WebView? = null
+
+    private lateinit var mainRoot: LinearLayout
+
     private val audioChunks =
         ArrayList<ByteArray>()
 
@@ -54,6 +58,8 @@ class MainActivity : Activity() {
     private fun createNovaInterface() {
 
         val root = LinearLayout(this)
+
+        mainRoot = root
 
         root.orientation =
             LinearLayout.VERTICAL
@@ -142,190 +148,33 @@ class MainActivity : Activity() {
                 dp(130)
             )
         )
+
+        // =========================================================
+        // AI ŞARKI SÖZÜ OLUŞTUR
+        // =========================================================
+
         val lyricsButton = Button(this)
 
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
+        lyricsButton.text =
+            "🎤 ŞARKI SÖZÜ OLUŞTUR"
 
-lyricsButton.setOnClickListener {
+        lyricsButton.setOnClickListener {
 
-    val lyricsWebView = WebView(this)
+            openLyricsGenerator()
+        }
 
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
+        root.addView(
+            lyricsButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
 
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
+        // =========================================================
+        // MÜZİK OLUŞTUR
+        // =========================================================
 
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-val lyricsButton = Button(this)
-
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-lyricsButton.setOnClickListener {
-
-    val lyricsWebView = WebView(this)
-
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
-
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
-
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-val lyricsButton = Button(this)
-
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-lyricsButton.setOnClickListener {
-
-    val lyricsWebView = WebView(this)
-
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
-
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
-
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-val lyricsButton = Button(this)
-
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-lyricsButton.setOnClickListener {
-
-    val lyricsWebView = WebView(this)
-
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
-
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
-
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-
-val lyricsButton = Button(this)
-
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-lyricsButton.setOnClickListener {
-
-    val lyricsWebView = WebView(this)
-
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
-
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
-
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-val lyricsButton = Button(this)
-
-lyricsButton.text =
-    "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-lyricsButton.setOnClickListener {
-
-    val lyricsWebView = WebView(this)
-
-    lyricsWebView.settings.javaScriptEnabled = true
-    lyricsWebView.settings.domStorageEnabled = true
-
-    lyricsWebView.loadUrl(
-        "file:///android_asset/lyrics.html"
-    )
-
-    setContentView(lyricsWebView)
-}
-
-root.addView(
-    lyricsButton,
-    LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        dp(55)
-    )
-)
-        
-     val lyricsButton = Button(this)
-     lricsButton.text = "🎤 ŞARKI SÖZÜ OLUŞTUR"
-
-     lricsButton.setOnClickListener {
-         val lyricsWebView = WebView(this)
-
-     lyricsWebView.settings.javaScriptEnabled = true
-
-     lyricsWebView.settings.domStorageEnabled = true
-
-         lyricsWebView.loadUrl(
-     "file:///android_asset/lyrics.html"
-         )
-
-         setContentView(lyricsWebView)
-     }
-
-     root.addView(
-         lyricsButton,
-         LinearLayout.LayoutParams(
-
-     ViewGroup.LayoutParams.MATCH_PARENT,
-             dp(55)
-         )
-     )
-        
         val musicButton =
             Button(this)
 
@@ -363,6 +212,10 @@ root.addView(
             )
         )
 
+        // =========================================================
+        // OYNAT
+        // =========================================================
+
         val playButton =
             Button(this)
 
@@ -381,6 +234,10 @@ root.addView(
                 dp(55)
             )
         )
+
+        // =========================================================
+        // DURAKLAT / DEVAM ET
+        // =========================================================
 
         val pauseButton =
             Button(this)
@@ -401,6 +258,10 @@ root.addView(
             )
         )
 
+        // =========================================================
+        // DURDUR
+        // =========================================================
+
         val stopButton =
             Button(this)
 
@@ -420,6 +281,10 @@ root.addView(
             )
         )
 
+        // =========================================================
+        // TELEFONA KAYDET
+        // =========================================================
+
         val saveButton =
             Button(this)
 
@@ -438,6 +303,10 @@ root.addView(
                 dp(55)
             )
         )
+
+        // =========================================================
+        // VİDEO OLUŞTUR
+        // =========================================================
 
         val videoButton =
             Button(this)
@@ -462,6 +331,10 @@ root.addView(
             )
         )
 
+        // =========================================================
+        // MUSICGEN WEBVIEW
+        // =========================================================
+
         musicWebView =
             WebView(this)
 
@@ -478,6 +351,109 @@ root.addView(
 
         setContentView(root)
     }
+
+    // =============================================================
+    // AI ŞARKI SÖZÜ EKRANI
+    // =============================================================
+
+    private fun openLyricsGenerator() {
+
+        val webView =
+            WebView(this)
+
+        lyricsWebView =
+            webView
+
+        webView.settings.javaScriptEnabled =
+            true
+
+        webView.settings.domStorageEnabled =
+            true
+
+        webView.settings.allowFileAccess =
+            true
+
+        webView.settings.allowContentAccess =
+            true
+
+        webView.settings.cacheMode =
+            WebSettings.LOAD_DEFAULT
+
+        webView.webViewClient =
+            WebViewClient()
+
+        webView.addJavascriptInterface(
+            LyricsBridge(),
+            "AndroidBridge"
+        )
+
+        webView.setBackgroundColor(
+            Color.rgb(12, 12, 20)
+        )
+
+        webView.loadUrl(
+            "file:///android_asset/lyrics.html"
+        )
+
+        setContentView(webView)
+    }
+
+    // =============================================================
+    // ŞARKI SÖZÜ BRIDGE
+    // =============================================================
+
+    inner class LyricsBridge {
+
+        @JavascriptInterface
+        fun onLyricsStatus(
+            message: String
+        ) {
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this@MainActivity,
+                    message,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+        @JavascriptInterface
+        fun onLyricsGenerated(
+            lyrics: String
+        ) {
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "Şarkı sözleri hazır.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+        @JavascriptInterface
+        fun onLyricsError(
+            message: String
+        ) {
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "Şarkı sözü hatası: " +
+                            message,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    // =============================================================
+    // MUSICGEN
+    // =============================================================
 
     private fun setupMusicGen() {
 
@@ -677,6 +653,10 @@ root.addView(
         ).show()
     }
 
+    // =============================================================
+    // MÜZİĞİ TELEFONA KAYDET
+    // =============================================================
+
     private fun saveMusicToPhone() {
 
         val sourceFile =
@@ -796,6 +776,10 @@ root.addView(
         }
     }
 
+    // =============================================================
+    // 4 DAKİKA 30 SANİYELİK WAV OLUŞTUR
+    // =============================================================
+
     private fun createFinalWav() {
 
         if (audioChunks.isEmpty()) {
@@ -812,8 +796,7 @@ root.addView(
         try {
 
             val targetSamples =
-                audioSampleRate *
-                        270
+                audioSampleRate * 270
 
             val targetBytes =
                 targetSamples * 2
@@ -911,6 +894,10 @@ root.addView(
             ).show()
         }
     }
+
+    // =============================================================
+    // WAV HEADER
+    // =============================================================
 
     private fun writeWavHeader(
         output: FileOutputStream,
@@ -1029,6 +1016,10 @@ root.addView(
         data[offset + 1] =
             ((value shr 8) and 0xff).toByte()
     }
+
+    // =============================================================
+    // MUSICGEN BRIDGE
+    // =============================================================
 
     inner class MusicGenBridge {
 
@@ -1197,6 +1188,10 @@ root.addView(
         }
     }
 
+    // =============================================================
+    // JAVASCRIPT ESCAPE
+    // =============================================================
+
     private fun JSONObjectEscape(
         text: String
     ): String {
@@ -1226,6 +1221,10 @@ root.addView(
                 "\""
     }
 
+    // =============================================================
+    // DP
+    // =============================================================
+
     private fun dp(
         value: Int
     ): Int {
@@ -1238,6 +1237,31 @@ root.addView(
         ).toInt()
     }
 
+    // =============================================================
+    // GERİ TUŞU
+    // =============================================================
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+
+        if (lyricsWebView != null) {
+
+            lyricsWebView?.destroy()
+
+            lyricsWebView = null
+
+            setContentView(mainRoot)
+
+            return
+        }
+
+        super.onBackPressed()
+    }
+
+    // =============================================================
+    // DESTROY
+    // =============================================================
+
     override fun onDestroy() {
 
         mediaPlayer?.release()
@@ -1245,6 +1269,10 @@ root.addView(
         mediaPlayer = null
 
         musicWebView.destroy()
+
+        lyricsWebView?.destroy()
+
+        lyricsWebView = null
 
         super.onDestroy()
     }
