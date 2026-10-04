@@ -20,7 +20,7 @@ let model = null;
 let loading = false;
 let generating = false;
 
-const TOTAL_CHUNKS = 27;
+const TOTAL_CHUNKS = 1;
 
 function sendStatus(message) {
 
@@ -159,11 +159,6 @@ function floatToWavBase64(
 ) {
 
     let audioSamples = samples;
-
-    /*
-     * MusicGen bazı sürümlerde Float32Array,
-     * bazı sürümlerde Tensor benzeri veri döndürebilir.
-     */
 
     if (
         audioSamples &&
@@ -366,87 +361,6 @@ function floatToWavBase64(
     );
 }
 
-async function generateSingleChunk(
-    prompt,
-    chunkIndex
-) {
-
-    sendStatus(
-        "Müzik bölümü " +
-        (chunkIndex + 1) +
-        " / " +
-        TOTAL_CHUNKS +
-        " oluşturuluyor..."
-    );
-
-    const inputs =
-        tokenizer(
-            prompt
-        );
-
-    const audioValues =
-        await model.generate({
-
-            ...inputs,
-
-            max_new_tokens: 500,
-
-            do_sample: true,
-
-            guidance_scale: 3
-        });
-
-    let audioData =
-        audioValues;
-
-    if (
-        audioValues &&
-        audioValues.data
-    ) {
-
-        audioData =
-            audioValues.data;
-    }
-
-    if (
-        !audioData ||
-        !audioData.length
-    ) {
-
-        throw new Error(
-            "Bölüm " +
-            (chunkIndex + 1) +
-            " için ses verisi alınamadı."
-        );
-    }
-
-    const sampleRate =
-        model
-            .config
-            .audio_encoder
-            .sampling_rate;
-
-    const wavBase64 =
-        floatToWavBase64(
-            audioData,
-            sampleRate
-        );
-
-    if (
-        window.AndroidBridge
-    ) {
-
-        window.AndroidBridge.onMusicChunk(
-            wavBase64,
-            chunkIndex,
-            TOTAL_CHUNKS,
-            sampleRate
-        );
-    }
-
-    return true;
-}
-
 window.generateMusic =
     async function(promptText) {
 
@@ -494,6 +408,15 @@ window.generateMusic =
             const prompt =
                 promptText.trim();
 
+            sendStatus(
+                "Müzik oluşturuluyor..."
+            );
+
+            const inputs =
+                tokenizer(
+                    prompt
+                );
+
             const sampleRate =
                 model
                     .config
@@ -501,39 +424,68 @@ window.generateMusic =
                     .sampling_rate;
 
             sendStatus(
-                "MusicGen hazır. " +
-                sampleRate +
-                " Hz ses kullanılacak."
+                "Müzik üretiliyor..."
             );
 
-            sendStatus(
-                "4 dakika 30 saniyelik müzik hazırlanıyor..."
-            );
+            const audioValues =
+                await model.generate({
 
-            for (
-                let chunkIndex = 0;
-                chunkIndex < TOTAL_CHUNKS;
-                chunkIndex++
+                    ...inputs,
+
+                    max_new_tokens: 500,
+
+                    do_sample: true,
+
+                    guidance_scale: 3
+                });
+
+            let audioData =
+                audioValues;
+
+            if (
+                audioValues &&
+                audioValues.data
             ) {
 
-                await generateSingleChunk(
-                    prompt,
-                    chunkIndex
-                );
+                audioData =
+                    audioValues.data;
+            }
 
-                /*
-                 * WebView'ın Android Bridge'e
-                 * nefes alması için kısa bekleme.
-                 */
+            if (
+                !audioData ||
+                !audioData.length
+            ) {
 
-                await new Promise(
-                    resolve =>
-                        setTimeout(
-                            resolve,
-                            150
-                        )
+                throw new Error(
+                    "MusicGen ses verisi oluşturmadı."
                 );
             }
+
+            const wavBase64 =
+                floatToWavBase64(
+                    audioData,
+                    sampleRate
+                );
+
+            if (
+                window.AndroidBridge
+            ) {
+
+                window.AndroidBridge.onMusicChunk(
+                    wavBase64,
+                    0,
+                    1,
+                    sampleRate
+                );
+            }
+
+            await new Promise(
+                resolve =>
+                    setTimeout(
+                        resolve,
+                        150
+                    )
+            );
 
             if (
                 window.AndroidBridge
@@ -544,8 +496,7 @@ window.generateMusic =
             }
 
             sendStatus(
-                "27 bölüm tamamlandı. " +
-                "4 dakika 30 saniyelik müzik hazırlanıyor..."
+                "Müzik hazır."
             );
 
         } catch (error) {
