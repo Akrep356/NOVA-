@@ -87,6 +87,12 @@ app.post("/generate", async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
 
+      console.error(
+        "STABLE AUDIO ERROR:",
+        response.status,
+        errorText
+      );
+
       return res.status(response.status).json({
         error: "Stable Audio request failed.",
         details: errorText
