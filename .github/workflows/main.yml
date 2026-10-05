@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -20,16 +20,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: 'true'
-   
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          grafle-version: '8.7' 
+          gradle-version: '8.7'
 
       - name: Build APK
         run: gradle assembleDebug
