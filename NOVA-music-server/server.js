@@ -420,7 +420,31 @@ Sadece bu şarkı sözünü döndür.
 // WIKIMEDIA COMMONS VİDEO ARAMA
 // =============================================================
 
-async function searchWikimediaVideos(searchText) {
+async function searchWikimediaVideos(
+  searchText
+) {
+
+  const cleanText =
+    String(searchText || "")
+      .replace(
+        /[^\p{L}\p{N}\s]/gu,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim()
+      .slice(0, 180);
+
+  const queryText =
+    `${cleanText} filetype:video`
+      .trim();
+
+  console.log(
+    "WIKIMEDIA SEARCH QUERY:",
+    queryText
+  );
 
   const url =
     new URL(
@@ -438,13 +462,18 @@ async function searchWikimediaVideos(searchText) {
   );
 
   url.searchParams.set(
+    "formatversion",
+    "2"
+  );
+
+  url.searchParams.set(
     "generator",
     "search"
   );
 
   url.searchParams.set(
     "gsrsearch",
-    searchText
+    queryText
   );
 
   url.searchParams.set(
@@ -454,7 +483,7 @@ async function searchWikimediaVideos(searchText) {
 
   url.searchParams.set(
     "gsrlimit",
-    "20"
+    "50"
   );
 
   url.searchParams.set(
@@ -478,7 +507,7 @@ async function searchWikimediaVideos(searchText) {
       {
         headers: {
           "User-Agent":
-            "NOVA-App/1.0"
+            "NOVA-App/1.0 (video generator)"
         }
       }
     );
@@ -494,11 +523,14 @@ async function searchWikimediaVideos(searchText) {
     await response.json();
 
   const pages =
-    data?.query?.pages
-      ? Object.values(
-          data.query.pages
-        )
+    Array.isArray(
+      data?.query?.pages
+    )
+      ? data.query.pages
       : [];
+
+  const MAX_DOWNLOAD_SIZE =
+    80 * 1024 * 1024;
 
   const videos =
     pages
@@ -526,10 +558,21 @@ async function searchWikimediaVideos(searchText) {
             ? info.url
             : "";
 
+        const title =
+          typeof page.title === "string"
+            ? page.title
+            : "Wikimedia video";
+
+        const size =
+          Number(
+            info.size || 0
+          );
+
         const isVideo =
           mime.startsWith("video/") ||
           mediaType === "video" ||
-          /\.(mp4|webm|ogv|ogg|mov)(\?|$)/i.test(
+          mediaType === "multimedia" ||
+          /\.(mp4|webm|ogv|ogg|mov|m4v)(\?|$)/i.test(
             fileUrl
           );
 
@@ -537,9 +580,25 @@ async function searchWikimediaVideos(searchText) {
           return null;
         }
 
+        if (!fileUrl) {
+          return null;
+        }
+
+        if (
+          size > MAX_DOWNLOAD_SIZE
+        ) {
+          console.log(
+            "SKIPPING LARGE VIDEO:",
+            title,
+            size
+          );
+
+          return null;
+        }
+
         return {
           title:
-            page.title || "Wikimedia video",
+            title,
 
           url:
             fileUrl,
@@ -548,7 +607,7 @@ async function searchWikimediaVideos(searchText) {
             mime,
 
           size:
-            Number(info.size || 0),
+            size,
 
           descriptionUrl:
             typeof info.descriptionurl === "string"
@@ -566,6 +625,57 @@ async function searchWikimediaVideos(searchText) {
 }
 
 // =============================================================
+// VİDEO UZANTISI
+// =============================================================
+
+function getVideoExtension(
+  video
+) {
+
+  const mime =
+    String(
+      video?.mime || ""
+    ).toLowerCase();
+
+  const fileUrl =
+    String(
+      video?.url || ""
+    );
+
+  if (
+    mime.includes("webm") ||
+    /\.webm(\?|$)/i.test(fileUrl)
+  ) {
+    return "webm";
+  }
+
+  if (
+    mime.includes("ogg") ||
+    /\.ogv(\?|$)/i.test(fileUrl) ||
+    /\.ogg(\?|$)/i.test(fileUrl)
+  ) {
+    return "ogv";
+  }
+
+  if (
+    mime.includes("quicktime") ||
+    /\.mov(\?|$)/i.test(fileUrl)
+  ) {
+    return "mov";
+  }
+
+  if (
+    mime.includes("mp4") ||
+    /\.mp4(\?|$)/i.test(fileUrl) ||
+    /\.m4v(\?|$)/i.test(fileUrl)
+  ) {
+    return "mp4";
+  }
+
+  return "mp4";
+}
+
+// =============================================================
 // WİKİMEDİA VİDEO İNDİRME
 // =============================================================
 
@@ -580,7 +690,7 @@ async function downloadVideo(
       {
         headers: {
           "User-Agent":
-            "NOVA-App/1.0"
+            "NOVA-App/1.0 (video generator)"
         }
       }
     );
@@ -651,7 +761,9 @@ function getVideoScaleFilter(
   orientation
 ) {
 
-  if (orientation === "9:16") {
+  if (
+    orientation === "9:16"
+  ) {
 
     return [
       "scale=480:854:force_original_aspect_ratio=increase",
@@ -660,7 +772,9 @@ function getVideoScaleFilter(
     ].join(",");
   }
 
-  if (orientation === "16:9") {
+  if (
+    orientation === "16:9"
+  ) {
 
     return [
       "scale=854:480:force_original_aspect_ratio=increase",
@@ -759,7 +873,10 @@ async function concatVideos(
 
         const escaped =
           file
-            .replace(/'/g, "'\\''");
+            .replace(
+              /'/g,
+              "'\\''"
+            );
 
         return `file '${escaped}'`;
 
@@ -805,12 +922,175 @@ async function concatVideos(
   } finally {
 
     try {
+
       fs.unlinkSync(
         listFile
       );
+
     } catch (_) {}
 
   }
+}
+
+// =============================================================
+// VİDEO ARAMA SIRASI
+// =============================================================
+
+function buildVideoSearchQueries(
+  style,
+  styleKeyword,
+  visualDescription
+) {
+
+  const queries = [];
+
+  const visual =
+    String(
+      visualDescription || ""
+    )
+      .replace(
+        /[^\p{L}\p{N}\s]/gu,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+
+  const styleText =
+    String(
+      styleKeyword || "cinematic"
+    )
+      .replace(
+        /[^\p{L}\p{N}\s]/gu,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+
+  // 1. Kullanıcının tam görsel isteği.
+  if (visual) {
+
+    queries.push(
+      `${visual} ${styleText}`
+    );
+
+    queries.push(
+      visual
+    );
+  }
+
+  // 2. Stil.
+  if (styleText) {
+    queries.push(
+      styleText
+    );
+  }
+
+  // 3. Genel stil alternatifleri.
+  const fallbackMap = {
+
+    "Sinematik": [
+      "cinematic",
+      "city",
+      "landscape",
+      "nature",
+      "film"
+    ],
+
+    "Duygusal": [
+      "emotional",
+      "sunset",
+      "rain",
+      "nature",
+      "people"
+    ],
+
+    "Enerjik": [
+      "concert",
+      "music",
+      "dance",
+      "festival",
+      "crowd"
+    ],
+
+    "Romantik": [
+      "romantic",
+      "couple",
+      "sunset",
+      "love",
+      "city"
+    ],
+
+    "Karanlık": [
+      "dark",
+      "night",
+      "rain",
+      "city",
+      "storm"
+    ],
+
+    "Neon": [
+      "neon",
+      "night city",
+      "city",
+      "lights",
+      "night"
+    ],
+
+    "Doğa": [
+      "nature",
+      "landscape",
+      "forest",
+      "mountain",
+      "ocean"
+    ],
+
+    "Konser": [
+      "concert",
+      "live music",
+      "music festival",
+      "stage",
+      "crowd"
+    ]
+  };
+
+  const fallbackQueries =
+    fallbackMap[style] ||
+    [
+      "cinematic",
+      "nature",
+      "city",
+      "landscape",
+      "concert"
+    ];
+
+  for (
+    const query of fallbackQueries
+  ) {
+
+    queries.push(
+      query
+    );
+
+  }
+
+  // Aynı sorguları kaldır.
+  return [
+    ...new Set(
+      queries
+        .map(
+          item =>
+            String(item)
+              .trim()
+        )
+        .filter(Boolean)
+    )
+  ];
 }
 
 // =============================================================
@@ -823,7 +1103,9 @@ async function concatVideos(
 // Wikimedia Commons:
 //   arama
 //      ↓
-//   video indirme
+//   ücretsiz video
+//      ↓
+//   indirme
 //      ↓
 //   FFmpeg
 //      ↓
@@ -904,10 +1186,11 @@ app.post(
         );
 
       // ---------------------------------------------------------
-      // Arama kelimelerini oluştur
+      // Stil anahtarları
       // ---------------------------------------------------------
 
       const styleMap = {
+
         "Sinematik":
           "cinematic",
 
@@ -937,61 +1220,64 @@ app.post(
         styleMap[style] ||
         "cinematic";
 
-      let searchText =
-        `${styleKeyword} ${visualDescription}`;
+      // ---------------------------------------------------------
+      // Birden fazla arama dene
+      // ---------------------------------------------------------
 
-      searchText =
-        searchText
-          .replace(
-            /[^\p{L}\p{N}\s]/gu,
-            " "
-          )
-          .replace(
-            /\s+/g,
-            " "
-          )
-          .trim();
-
-      if (!searchText) {
-        searchText =
-          "cinematic nature";
-      }
-
-      // Çok uzun arama sorgusunu sınırla.
-      searchText =
-        searchText.slice(
-          0,
-          180
+      const searchQueries =
+        buildVideoSearchQueries(
+          style,
+          styleKeyword,
+          visualDescription
         );
 
       console.log(
-        "WIKIMEDIA VIDEO SEARCH:",
-        searchText
+        "WIKIMEDIA SEARCH PLAN:",
+        searchQueries
       );
 
-      // ---------------------------------------------------------
-      // Wikimedia Commons'tan video ara
-      // ---------------------------------------------------------
+      let videos = [];
 
-      let videos =
-        await searchWikimediaVideos(
-          searchText
-        );
-
-      // İlk aramada uygun video bulunamazsa
-      // daha genel bir arama yap.
-      if (
-        videos.length === 0
+      for (
+        const query of searchQueries
       ) {
 
-        console.log(
-          "Specific video search returned no result."
-        );
+        try {
 
-        videos =
-          await searchWikimediaVideos(
-            styleKeyword
+          console.log(
+            "TRYING VIDEO SEARCH:",
+            query
           );
+
+          const results =
+            await searchWikimediaVideos(
+              query
+            );
+
+          console.log(
+            "SEARCH RESULT COUNT:",
+            results.length
+          );
+
+          if (
+            results.length > 0
+          ) {
+
+            videos =
+              results;
+
+            break;
+          }
+
+        } catch (searchError) {
+
+          console.error(
+            "WIKIMEDIA SEARCH ERROR:",
+            searchError.message
+          );
+
+        }
+
       }
 
       if (
@@ -1000,19 +1286,28 @@ app.post(
 
         return res.status(404).json({
           error:
-            "Uygun ücretsiz video bulunamadı."
+            "Uygun ücretsiz video bulunamadı. Wikimedia Commons üzerinde uygun video bulunamadı."
         });
       }
 
-      // En fazla 5 video kullan.
+      // ---------------------------------------------------------
+      // Aynı videoları tekrar etmeden önce en fazla 5 kaynak
+      // ---------------------------------------------------------
+
       videos =
-        videos.slice(
-          0,
-          5
-        );
+        videos
+          .filter(
+            video =>
+              video &&
+              video.url
+          )
+          .slice(
+            0,
+            5
+          );
 
       console.log(
-        "WIKIMEDIA VIDEOS FOUND:",
+        "WIKIMEDIA VIDEOS SELECTED:",
         videos.length
       );
 
@@ -1032,11 +1327,9 @@ app.post(
           videos[i];
 
         const extension =
-          video.mime.includes("webm")
-            ? "webm"
-            : video.mime.includes("ogg")
-              ? "ogv"
-              : "mp4";
+          getVideoExtension(
+            video
+          );
 
         const destination =
           path.join(
@@ -1068,17 +1361,133 @@ app.post(
 
           console.error(
             "VIDEO DOWNLOAD ERROR:",
+            video.title,
             downloadError.message
           );
 
           try {
+
             fs.unlinkSync(
               destination
             );
+
           } catch (_) {}
 
         }
 
+      }
+
+      // ---------------------------------------------------------
+      // Eğer ilk sonuçların hiçbiri indirilemezse,
+      // daha genel aramalardan tekrar video bul.
+      // ---------------------------------------------------------
+
+      if (
+        downloadedFiles.length === 0
+      ) {
+
+        console.log(
+          "FIRST VIDEO DOWNLOAD ROUND FAILED."
+        );
+
+        const emergencyQueries = [
+          "city",
+          "nature",
+          "landscape",
+          "night",
+          "concert"
+        ];
+
+        for (
+          const query of emergencyQueries
+        ) {
+
+          try {
+
+            const emergencyVideos =
+              await searchWikimediaVideos(
+                query
+              );
+
+            for (
+              const video of emergencyVideos
+            ) {
+
+              if (
+                downloadedFiles.length >= 3
+              ) {
+                break;
+              }
+
+              const index =
+                downloadedFiles.length;
+
+              const extension =
+                getVideoExtension(
+                  video
+                );
+
+              const destination =
+                path.join(
+                  workDir,
+                  `emergency-${index}.${extension}`
+                );
+
+              try {
+
+                console.log(
+                  "EMERGENCY DOWNLOAD:",
+                  video.title
+                );
+
+                await downloadVideo(
+                  video.url,
+                  destination
+                );
+
+                downloadedFiles.push({
+                  file:
+                    destination,
+
+                  source:
+                    video
+                });
+
+              } catch (emergencyDownloadError) {
+
+                console.error(
+                  "EMERGENCY DOWNLOAD ERROR:",
+                  emergencyDownloadError.message
+                );
+
+                try {
+
+                  fs.unlinkSync(
+                    destination
+                  );
+
+                } catch (_) {}
+
+              }
+
+            }
+
+            if (
+              downloadedFiles.length > 0
+            ) {
+              break;
+            }
+
+          } catch (emergencySearchError) {
+
+            console.error(
+              "EMERGENCY SEARCH ERROR:",
+              emergencySearchError.message
+            );
+
+          }
+
+        }
       }
 
       if (
@@ -1087,52 +1496,96 @@ app.post(
 
         return res.status(500).json({
           error:
-            "Bulunan videolar indirilemedi."
+            "Bulunan ücretsiz videolar indirilemedi."
         });
       }
 
+      console.log(
+        "DOWNLOADABLE VIDEOS:",
+        downloadedFiles.length
+      );
+
       // ---------------------------------------------------------
       // Klipleri oluştur
+      // ---------------------------------------------------------
+      //
+      // 10-12 saniyelik parçalar kullanıyoruz.
+      // Süre yetmezse kaynak videoları tekrar kullanıyoruz.
+      //
+      // Böylece:
+      //
+      // 30 sn  -> yaklaşık 3 klip
+      // 60 sn  -> yaklaşık 6 klip
+      // 90 sn  -> yaklaşık 9 klip
+      // 180 sn -> yaklaşık 18 klip
+      //
       // ---------------------------------------------------------
 
       const segmentFiles = [];
 
       const segmentDuration =
-        Math.max(
-          5,
-          Math.min(
-            12,
-            Math.ceil(
-              safeDuration /
-              downloadedFiles.length
-            )
-          )
-        );
+        safeDuration <= 10
+          ? safeDuration
+          : 10;
 
-      for (
-        let i = 0;
-        i < downloadedFiles.length;
-        i++
+      let remainingDuration =
+        safeDuration;
+
+      let segmentIndex =
+        0;
+
+      let sourceIndex =
+        0;
+
+      while (
+        remainingDuration > 0
       ) {
+
+        const source =
+          downloadedFiles[
+            sourceIndex %
+            downloadedFiles.length
+          ];
+
+        const currentDuration =
+          Math.min(
+            segmentDuration,
+            remainingDuration
+          );
 
         const segmentFile =
           path.join(
             workDir,
-            `segment-${i}.mp4`
+            `segment-${segmentIndex}.mp4`
           );
 
         try {
 
+          console.log(
+            "CREATING SEGMENT:",
+            segmentIndex,
+            "duration:",
+            currentDuration,
+            "source:",
+            source.source.title
+          );
+
           await createVideoSegment(
-            downloadedFiles[i].file,
+            source.file,
             segmentFile,
-            segmentDuration,
+            currentDuration,
             orientation
           );
 
           segmentFiles.push(
             segmentFile
           );
+
+          remainingDuration -=
+            currentDuration;
+
+          segmentIndex++;
+          sourceIndex++;
 
         } catch (segmentError) {
 
@@ -1141,6 +1594,25 @@ app.post(
             segmentError.message
           );
 
+          sourceIndex++;
+
+          // Aynı kaynak sürekli hata verirse
+          // döngünün sonsuza girmesini önle.
+          if (
+            sourceIndex >
+            downloadedFiles.length * 3 &&
+            segmentFiles.length === 0
+          ) {
+
+            break;
+          }
+
+        }
+
+        if (
+          segmentIndex > 60
+        ) {
+          break;
         }
 
       }
@@ -1155,11 +1627,16 @@ app.post(
         });
       }
 
+      console.log(
+        "VIDEO SEGMENTS CREATED:",
+        segmentFiles.length
+      );
+
       // ---------------------------------------------------------
       // Birleştir
       // ---------------------------------------------------------
 
-      let combinedFile =
+      const combinedFile =
         path.join(
           workDir,
           "combined.mp4"
@@ -1314,7 +1791,11 @@ app.post(
     } finally {
 
       // ---------------------------------------------------------
-      // Render'ın geçici diskini temizle
+      // Render geçici dosyaları temizle.
+      //
+      // 5 saniye yerine 120 saniye bekliyoruz.
+      // Büyük MP4 Android'e gönderilirken dosyanın erken
+      // silinmesini önlüyoruz.
       // ---------------------------------------------------------
 
       setTimeout(
@@ -1344,7 +1825,7 @@ app.post(
           }
 
         },
-        5000
+        120000
       );
 
     }
