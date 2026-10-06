@@ -61,10 +61,6 @@ class MainActivity : Activity() {
         showMainScreen()
     }
 
-    // =========================================================
-    // ANA EKRAN
-    // =========================================================
-
     private fun showMainScreen() {
 
         mainRoot = LinearLayout(this)
@@ -82,10 +78,6 @@ class MainActivity : Activity() {
         scrollView.addView(mainRoot)
 
         setContentView(scrollView)
-
-        // -----------------------------------------------------
-        // BAŞLIK
-        // -----------------------------------------------------
 
         val title = TextView(this)
 
@@ -117,10 +109,6 @@ class MainActivity : Activity() {
                 dp(40)
             )
         )
-
-        // -----------------------------------------------------
-        // PROMPT
-        // -----------------------------------------------------
 
         val promptTitle = TextView(this)
 
@@ -162,16 +150,11 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // SÖZ OLUŞTUR
-        // -----------------------------------------------------
-
         val lyricsButton = Button(this)
 
         lyricsButton.text = "✍️ SÖZ OLUŞTUR"
 
         lyricsButton.setOnClickListener {
-
             showLyricsScreen()
         }
 
@@ -182,10 +165,6 @@ class MainActivity : Activity() {
                 dp(55)
             )
         )
-
-        // -----------------------------------------------------
-        // MÜZİK OLUŞTUR
-        // -----------------------------------------------------
 
         val musicButton = Button(this)
 
@@ -218,10 +197,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // MÜZİK KONTROLLERİ
-        // -----------------------------------------------------
-
         val controls = LinearLayout(this)
 
         controls.orientation = LinearLayout.HORIZONTAL
@@ -231,7 +206,6 @@ class MainActivity : Activity() {
         playButton.text = "▶️ OYNAT"
 
         playButton.setOnClickListener {
-
             playGeneratedMusic()
         }
 
@@ -250,7 +224,8 @@ class MainActivity : Activity() {
 
         pauseButton.setOnClickListener {
 
-            if (mediaPlayer != null &&
+            if (
+                mediaPlayer != null &&
                 mediaPlayer!!.isPlaying
             ) {
                 mediaPlayer!!.pause()
@@ -271,7 +246,6 @@ class MainActivity : Activity() {
         stopButton.text = "⏹️ DURDUR"
 
         stopButton.setOnClickListener {
-
             stopMusic()
         }
 
@@ -292,16 +266,11 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // MP3 KAYDET
-        // -----------------------------------------------------
-
         val saveMusicButton = Button(this)
 
         saveMusicButton.text = "💾 MP3'Ü TELEFONA KAYDET"
 
         saveMusicButton.setOnClickListener {
-
             saveMusicToPhone()
         }
 
@@ -313,16 +282,11 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // VİDEO
-        // -----------------------------------------------------
-
         val videoButton = Button(this)
 
         videoButton.text = "🎬 MÜZİK VİDEOSU OLUŞTUR"
 
         videoButton.setOnClickListener {
-
             showVideoScreen()
         }
 
@@ -333,10 +297,6 @@ class MainActivity : Activity() {
                 dp(65)
             )
         )
-
-        // -----------------------------------------------------
-        // DURUM
-        // -----------------------------------------------------
 
         val info = TextView(this)
 
@@ -357,10 +317,6 @@ class MainActivity : Activity() {
             )
         )
     }
-
-    // =========================================================
-    // MÜZİK OLUŞTUR
-    // =========================================================
 
     private fun generateMusic(prompt: String) {
 
@@ -384,7 +340,6 @@ class MainActivity : Activity() {
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 60_000
                 connection.readTimeout = 15 * 60 * 1000
-
                 connection.doOutput = true
 
                 connection.setRequestProperty(
@@ -398,16 +353,14 @@ class MainActivity : Activity() {
                 )
 
                 val json =
-                    "{"
-                        + "\"prompt\":\"${jsonEscape(prompt)}\","
-                        + "\"duration\":$musicDurationSeconds"
-                        + "}"
+                    """{"prompt":"${jsonEscape(prompt)}","duration":$musicDurationSeconds}"""
 
                 connection.outputStream.use { output ->
 
                     output.write(
                         json.toByteArray(Charsets.UTF_8)
                     )
+
                     output.flush()
                 }
 
@@ -416,17 +369,18 @@ class MainActivity : Activity() {
 
                 if (responseCode !in 200..299) {
 
-                    val errorText = try {
+                    val errorText =
+                        try {
 
-                        connection.errorStream
-                            ?.bufferedReader()
-                            ?.use { it.readText() }
-                            ?: "Sunucu hatası"
+                            connection.errorStream
+                                ?.bufferedReader()
+                                ?.use { it.readText() }
+                                ?: "Sunucu hatası"
 
-                    } catch (e: Exception) {
+                        } catch (e: Exception) {
 
-                        "Sunucu hatası"
-                    }
+                            "Sunucu hatası"
+                        }
 
                     runOnUiThread {
 
@@ -511,10 +465,6 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    // =========================================================
-    // MÜZİK OYNAT
-    // =========================================================
-
     private fun playGeneratedMusic() {
 
         val file = generatedAudioFile
@@ -551,7 +501,6 @@ class MainActivity : Activity() {
             )
 
             mediaPlayer!!.prepare()
-
             mediaPlayer!!.start()
 
         } catch (e: Exception) {
@@ -564,27 +513,16 @@ class MainActivity : Activity() {
         }
     }
 
-    // =========================================================
-    // MÜZİK DURDUR
-    // =========================================================
-
     private fun stopMusic() {
 
         try {
-
             mediaPlayer?.stop()
-
         } catch (_: Exception) {
         }
 
         mediaPlayer?.release()
-
         mediaPlayer = null
     }
-
-    // =========================================================
-    // MP3 TELEFONA KAYDET
-    // =========================================================
 
     private fun saveMusicToPhone() {
 
@@ -621,7 +559,10 @@ class MainActivity : Activity() {
                         "audio/mpeg"
                     )
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (
+                        Build.VERSION.SDK_INT >=
+                        Build.VERSION_CODES.Q
+                    ) {
 
                         put(
                             MediaStore.MediaColumns.RELATIVE_PATH,
@@ -678,7 +619,10 @@ class MainActivity : Activity() {
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.Q
+            ) {
 
                 val finishValues =
                     ContentValues().apply {
@@ -712,10 +656,6 @@ class MainActivity : Activity() {
             ).show()
         }
     }
-
-    // =========================================================
-    // SÖZ EKRANI
-    // =========================================================
 
     private fun showLyricsScreen() {
 
@@ -787,7 +727,6 @@ class MainActivity : Activity() {
         backButton.text = "⬅️ ANA EKRANA DÖN"
 
         backButton.setOnClickListener {
-
             showMainScreen()
         }
 
@@ -801,10 +740,6 @@ class MainActivity : Activity() {
 
         setContentView(root)
     }
-
-    // =========================================================
-    // LYRICS BRIDGE
-    // =========================================================
 
     inner class LyricsBridge {
 
@@ -849,10 +784,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // =========================================================
-    // VİDEO EKRANI
-    // =========================================================
-
     private fun showVideoScreen() {
 
         val scroll = ScrollView(this)
@@ -878,10 +809,6 @@ class MainActivity : Activity() {
 
         setContentView(scroll)
 
-        // -----------------------------------------------------
-        // BAŞLIK
-        // -----------------------------------------------------
-
         val title = TextView(this)
 
         title.text = "🎬 NOVA MÜZİK VİDEOSU"
@@ -897,10 +824,6 @@ class MainActivity : Activity() {
                 dp(70)
             )
         )
-
-        // -----------------------------------------------------
-        // SÖZLER
-        // -----------------------------------------------------
 
         val lyricsTitle = TextView(this)
 
@@ -944,10 +867,6 @@ class MainActivity : Activity() {
                 dp(140)
             )
         )
-
-        // -----------------------------------------------------
-        // VİDEO STİLİ
-        // -----------------------------------------------------
 
         val styleTitle = TextView(this)
 
@@ -996,10 +915,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // VİDEO SÜRESİ
-        // -----------------------------------------------------
-
         val durationTitle = TextView(this)
 
         durationTitle.text = "VİDEO SÜRESİ"
@@ -1043,10 +958,6 @@ class MainActivity : Activity() {
                 dp(55)
             )
         )
-
-        // -----------------------------------------------------
-        // ORYANTASYON
-        // -----------------------------------------------------
 
         val orientationTitle = TextView(this)
 
@@ -1108,10 +1019,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // GÖRSEL AÇIKLAMA
-        // -----------------------------------------------------
-
         val descriptionTitle = TextView(this)
 
         descriptionTitle.text =
@@ -1146,10 +1053,6 @@ class MainActivity : Activity() {
                 dp(100)
             )
         )
-
-        // -----------------------------------------------------
-        // VİDEO OLUŞTUR
-        // -----------------------------------------------------
 
         val createVideoButton =
             Button(this)
@@ -1217,10 +1120,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // VİDEO ÖNİZLEME
-        // -----------------------------------------------------
-
         val previewTitle =
             TextView(this)
 
@@ -1256,10 +1155,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // VİDEO KAYDET
-        // -----------------------------------------------------
-
         val saveVideoButton =
             Button(this)
 
@@ -1267,7 +1162,6 @@ class MainActivity : Activity() {
             "💾 VİDEOYU TELEFONA KAYDET"
 
         saveVideoButton.setOnClickListener {
-
             saveVideoToPhone()
         }
 
@@ -1279,10 +1173,6 @@ class MainActivity : Activity() {
             )
         )
 
-        // -----------------------------------------------------
-        // ANA EKRANA DÖN
-        // -----------------------------------------------------
-
         val backButton =
             Button(this)
 
@@ -1290,7 +1180,6 @@ class MainActivity : Activity() {
             "⬅️ ANA EKRANA DÖN"
 
         backButton.setOnClickListener {
-
             showMainScreen()
         }
 
@@ -1302,10 +1191,6 @@ class MainActivity : Activity() {
             )
         )
     }
-
-    // =========================================================
-    // VİDEO RENDER SUNUCUSUNA GÖNDER
-    // =========================================================
 
     private fun prepareVideoOnServer(
         lyrics: String,
@@ -1358,13 +1243,7 @@ class MainActivity : Activity() {
                 )
 
                 val json =
-                    "{"
-                        + "\"lyrics\":\"${jsonEscape(lyrics)}\","
-                        + "\"style\":\"${jsonEscape(style)}\","
-                        + "\"duration\":$duration,"
-                        + "\"orientation\":\"${jsonEscape(orientation)}\","
-                        + "\"visualDescription\":\"${jsonEscape(visualDescription)}\""
-                        + "}"
+                    """{"lyrics":"${jsonEscape(lyrics)}","style":"${jsonEscape(style)}","duration":$duration,"orientation":"${jsonEscape(orientation)}","visualDescription":"${jsonEscape(visualDescription)}"}"""
 
                 connection.outputStream.use { output ->
 
@@ -1477,7 +1356,6 @@ class MainActivity : Activity() {
                         )
 
                         preview.setOnPreparedListener {
-
                             it.isLooping = false
                         }
 
@@ -1509,10 +1387,6 @@ class MainActivity : Activity() {
 
         }.start()
     }
-
-    // =========================================================
-    // VİDEOYU TELEFONA KAYDET
-    // =========================================================
 
     private fun saveVideoToPhone() {
 
@@ -1652,10 +1526,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // =========================================================
-    // JSON ESCAPE
-    // =========================================================
-
     private fun jsonEscape(
         text: String
     ): String {
@@ -1683,10 +1553,6 @@ class MainActivity : Activity() {
             )
     }
 
-    // =========================================================
-    // DP
-    // =========================================================
-
     private fun dp(
         value: Int
     ): Int {
@@ -1697,25 +1563,17 @@ class MainActivity : Activity() {
             ).toInt()
     }
 
-    // =========================================================
-    // ACTIVITY KAPANIRKEN
-    // =========================================================
-
     override fun onDestroy() {
 
         try {
-
             mediaPlayer?.release()
-
         } catch (_: Exception) {
         }
 
         mediaPlayer = null
 
         try {
-
             lyricsWebView?.destroy()
-
         } catch (_: Exception) {
         }
 
@@ -1723,10 +1581,6 @@ class MainActivity : Activity() {
 
         super.onDestroy()
     }
-
-    // =========================================================
-    // GERİ TUŞU
-    // =========================================================
 
     override fun onBackPressed() {
 
