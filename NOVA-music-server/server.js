@@ -10,82 +10,142 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
+// =============================================================
+// ANA SAYFA
+// =============================================================
+
 app.get("/", (_req, res) => {
   res.json({
     name: "NOVA Music Server",
     status: "ok",
     endpoints: [
       "POST /generate",
-      "POST /generate-lyrics"
+      "POST /generate-lyrics",
+      "POST /prepare-video"
     ]
   });
 });
+
+// =============================================================
+// HEALTH
+// =============================================================
 
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     stabilityKeyConfigured: Boolean(STABILITY_API_KEY),
-    geminiKeyConfigured: Boolean(GEMINI_API_KEY)
+    geminiKeyConfigured: Boolean(GEMINI_API_KEY),
+    videoEngine: "preparation"
   });
 });
 
+// =============================================================
+// MÜZİK OLUŞTURMA
+// =============================================================
 
-/*
- * EXISTING MUSIC GENERATION
- * Bu bölüm değiştirilmedi.
- */
 app.post("/generate", async (req, res) => {
   try {
+
     if (!STABILITY_API_KEY) {
+
       return res.status(500).json({
-        error: "STABILITY_API_KEY is not configured on the server."
+        error:
+          "STABILITY_API_KEY is not configured on the server."
       });
     }
 
-    const prompt = typeof req.body?.prompt === "string"
-      ? req.body.prompt.trim()
-      : "";
+    const prompt =
+      typeof req.body?.prompt === "string"
+        ? req.body.prompt.trim()
+        : "";
 
     if (!prompt) {
+
       return res.status(400).json({
         error: "prompt is required."
       });
     }
 
     if (prompt.length > 10000) {
+
       return res.status(400).json({
         error: "prompt is too long."
       });
     }
 
-    const requestedDuration = Number(req.body?.duration ?? 30);
-    const duration = Math.max(1, Math.min(190, requestedDuration));
+    const requestedDuration =
+      Number(req.body?.duration ?? 30);
 
-    const form = new FormData();
+    const duration =
+      Math.max(
+        1,
+        Math.min(
+          190,
+          requestedDuration
+        )
+      );
 
-    form.append("prompt", prompt);
-    form.append("output_format", "mp3");
-    form.append("duration", String(duration));
-    form.append("model", "stable-audio-2.5");
-    form.append("steps", "8");
-    form.append("cfg_scale", "1");
+    const form =
+      new FormData();
 
-    const response = await fetch(
-      "https://api.stability.ai/v2beta/audio/stable-audio-2/text-to-audio",
-      {
-        method: "POST",
-        headers: {
-          "authorization": `Bearer ${STABILITY_API_KEY}`,
-          "accept": "audio/*",
-          "stability-client-id": "NOVA",
-          "stability-client-version": "1.0.0"
-        },
-        body: form
-      }
+    form.append(
+      "prompt",
+      prompt
     );
 
+    form.append(
+      "output_format",
+      "mp3"
+    );
+
+    form.append(
+      "duration",
+      String(duration)
+    );
+
+    form.append(
+      "model",
+      "stable-audio-2.5"
+    );
+
+    form.append(
+      "steps",
+      "8"
+    );
+
+    form.append(
+      "cfg_scale",
+      "1"
+    );
+
+    const response =
+      await fetch(
+        "https://api.stability.ai/v2beta/audio/stable-audio-2/text-to-audio",
+        {
+          method: "POST",
+
+          headers: {
+            "authorization":
+              `Bearer ${STABILITY_API_KEY}`,
+
+            "accept":
+              "audio/*",
+
+            "stability-client-id":
+              "NOVA",
+
+            "stability-client-version":
+              "1.0.0"
+          },
+
+          body: form
+        }
+      );
+
     if (!response.ok) {
-      const errorText = await response.text();
+
+      const errorText =
+        await response.text();
 
       console.error(
         "STABLE AUDIO ERROR:",
@@ -93,65 +153,95 @@ app.post("/generate", async (req, res) => {
         errorText
       );
 
-      return res.status(response.status).json({
-        error: "Stable Audio request failed.",
-        details: errorText
+      return res.status(
+        response.status
+      ).json({
+        error:
+          "Stable Audio request failed.",
+
+        details:
+          errorText
       });
     }
 
-    const audioBuffer = Buffer.from(
-      await response.arrayBuffer()
+    const audioBuffer =
+      Buffer.from(
+        await response.arrayBuffer()
+      );
+
+    res.setHeader(
+      "Content-Type",
+      "audio/mpeg"
     );
 
-    res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader(
       "Content-Disposition",
       'inline; filename="nova-generated.mp3"'
     );
-    res.setHeader("Cache-Control", "no-store");
 
-    return res.send(audioBuffer);
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
+    return res.send(
+      audioBuffer
+    );
 
   } catch (error) {
-    console.error(error);
+
+    console.error(
+      "Music generation error:",
+      error
+    );
 
     return res.status(500).json({
-      error: "NOVA music generation server error."
+      error:
+        "NOVA music generation server error."
     });
   }
 });
 
+// =============================================================
+// GEMINI ŞARKI SÖZÜ
+// =============================================================
 
-/*
- * GEMINI TÜRKÇE ŞARKI SÖZÜ OLUŞTURMA
- */
-app.post("/generate-lyrics", async (req, res) => {
-  try {
+app.post(
+  "/generate-lyrics",
+  async (req, res) => {
 
-    if (!GEMINI_API_KEY) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is not configured on the server."
-      });
-    }
+    try {
 
-    const topic = typeof req.body?.topic === "string"
-      ? req.body.topic.trim()
-      : "";
+      if (!GEMINI_API_KEY) {
 
-    if (!topic) {
-      return res.status(400).json({
-        error: "topic is required."
-      });
-    }
+        return res.status(500).json({
+          error:
+            "GEMINI_API_KEY is not configured on the server."
+        });
+      }
 
-    if (topic.length > 2000) {
-      return res.status(400).json({
-        error: "topic is too long."
-      });
-    }
+      const topic =
+        typeof req.body?.topic === "string"
+          ? req.body.topic.trim()
+          : "";
 
+      if (!topic) {
 
-    const prompt = `
+        return res.status(400).json({
+          error:
+            "topic is required."
+        });
+      }
+
+      if (topic.length > 2000) {
+
+        return res.status(400).json({
+          error:
+            "topic is too long."
+        });
+      }
+
+      const prompt = `
 Sen NOVA adlı müzik uygulamasının profesyonel Türkçe şarkı sözü yazarısın.
 
 Kullanıcının verdiği konu:
@@ -203,114 +293,260 @@ KESİN KURALLAR:
 Sadece bu şarkı sözünü döndür.
 `;
 
+      const response =
+        await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+          {
+            method: "POST",
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-      {
-        method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY
-        },
+              "x-goog-api-key":
+                GEMINI_API_KEY
+            },
 
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: prompt
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
                 }
-              ]
-            }
-          ],
+              ],
 
-          generationConfig: {
-            maxOutputTokens: 3000
+              generationConfig: {
+                maxOutputTokens: 3000
+              }
+            })
           }
-        })
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+
+        console.error(
+          "Gemini API error:",
+          responseText
+        );
+
+        return res.status(
+          response.status
+        ).json({
+          error:
+            "Gemini lyrics generation failed.",
+
+          details:
+            responseText
+        });
       }
-    );
 
+      let data;
 
-    const responseText = await response.text();
+      try {
 
+        data =
+          JSON.parse(
+            responseText
+          );
 
-    if (!response.ok) {
+      } catch (parseError) {
+
+        console.error(
+          "Gemini JSON parse error:",
+          parseError
+        );
+
+        return res.status(500).json({
+          error:
+            "Invalid response received from Gemini."
+        });
+      }
+
+      const lyrics =
+        data?.candidates?.[0]
+          ?.content?.parts
+          ?.map(part =>
+            typeof part?.text === "string"
+              ? part.text
+              : ""
+          )
+          .join("")
+          .trim();
+
+      if (!lyrics) {
+
+        return res.status(500).json({
+          error:
+            "Gemini did not return lyrics."
+        });
+      }
+
+      return res.json({
+        ok: true,
+        lyrics: lyrics
+      });
+
+    } catch (error) {
 
       console.error(
-        "Gemini API error:",
-        responseText
+        "Lyrics generation error:",
+        error
       );
 
-      return res.status(response.status).json({
-        error: "Gemini lyrics generation failed.",
-        details: responseText
+      return res.status(500).json({
+        error:
+          "NOVA lyrics generation server error."
       });
     }
+  }
+);
 
+// =============================================================
+// VİDEO HAZIRLIK ENDPOINT'İ
+// =============================================================
+//
+// Şimdilik gerçek AI video üretimi YAPMAZ.
+//
+// Stability AI'nin hosted Stable Video API'si
+// artık kullanılabilir olmadığı için burada sahte
+// bir MP4 üretmiyoruz.
+//
+// Bu endpoint, Android uygulamasından gelen
+// video ayarlarını doğrular ve hazırlar.
+//
+// Gerçek video motorunu daha sonra buraya bağlayacağız.
+// =============================================================
 
-    let data;
+app.post(
+  "/prepare-video",
+  async (req, res) => {
 
     try {
 
-      data = JSON.parse(responseText);
+      const lyrics =
+        typeof req.body?.lyrics === "string"
+          ? req.body.lyrics.trim()
+          : "";
 
-    } catch (parseError) {
+      const style =
+        typeof req.body?.style === "string"
+          ? req.body.style.trim()
+          : "Sinematik";
+
+      const duration =
+        Number(
+          req.body?.duration ?? 30
+        );
+
+      const orientation =
+        typeof req.body?.orientation === "string"
+          ? req.body.orientation.trim()
+          : "9:16";
+
+      const visualDescription =
+        typeof req.body?.visualDescription === "string"
+          ? req.body.visualDescription.trim()
+          : "";
+
+      if (!lyrics) {
+
+        return res.status(400).json({
+          error:
+            "lyrics is required."
+        });
+      }
+
+      if (
+        ![
+          "9:16",
+          "16:9",
+          "1:1"
+        ].includes(
+          orientation
+        )
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid video orientation."
+        });
+      }
+
+      const safeDuration =
+        Math.max(
+          1,
+          Math.min(
+            180,
+            duration
+          )
+        );
+
+      const videoPrompt =
+        [
+          "NOVA music video",
+          `Style: ${style}`,
+          `Duration: ${safeDuration} seconds`,
+          `Orientation: ${orientation}`,
+          `Lyrics: ${lyrics}`,
+          visualDescription
+            ? `Visual description: ${visualDescription}`
+            : ""
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+      console.log(
+        "VIDEO PREPARATION:",
+        videoPrompt
+      );
+
+      return res.json({
+        ok: true,
+        status: "prepared",
+        message:
+          "Video settings prepared successfully.",
+        video: {
+          style: style,
+          duration: safeDuration,
+          orientation: orientation,
+          visualDescription:
+            visualDescription,
+          prompt: videoPrompt
+        }
+      });
+
+    } catch (error) {
 
       console.error(
-        "Gemini JSON parse error:",
-        parseError
+        "Video preparation error:",
+        error
       );
 
       return res.status(500).json({
-        error: "Invalid response received from Gemini."
+        error:
+          "NOVA video preparation server error."
       });
     }
+  }
+);
 
+// =============================================================
+// SERVER
+// =============================================================
 
-    const lyrics = data?.candidates?.[0]?.content?.parts
-      ?.map(part =>
-        typeof part?.text === "string"
-          ? part.text
-          : ""
-      )
-      .join("")
-      .trim();
+app.listen(
+  PORT,
+  () => {
 
-
-    if (!lyrics) {
-
-      return res.status(500).json({
-        error: "Gemini did not return lyrics."
-      });
-    }
-
-
-    return res.json({
-      ok: true,
-      lyrics: lyrics
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      "Lyrics generation error:",
-      error
+    console.log(
+      `NOVA Music Server listening on port ${PORT}`
     );
 
-    return res.status(500).json({
-      error: "NOVA lyrics generation server error."
-    });
   }
-});
-
-
-app.listen(PORT, () => {
-
-  console.log(
-    `NOVA Music Server listening on port ${PORT}`
-  );
-
-});
+);
