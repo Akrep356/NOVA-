@@ -39,6 +39,9 @@ class MainActivity : Activity() {
     private val musicServerUrl =
         "https://nova-cf5h.onrender.com/generate"
 
+    private val videoServerUrl =
+        "https://nova-cf5h.onrender.com/prepare-video"
+
     // Render endpoint'inin mevcut maksimum süresi
     private val musicDurationSeconds = 190
 
@@ -1035,36 +1038,41 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
 
-            val videoDescription =
-                if (
-                    visualDescription.isEmpty()
+            val durationSeconds =
+                when (
+                    selectedDuration
                 ) {
-                    "NOVA video: " +
-                            selectedStyle +
-                            ", " +
-                            selectedDuration +
-                            ", " +
-                            selectedOrientation
-                } else {
-                    "NOVA video: " +
-                            selectedStyle +
-                            ", " +
-                            selectedDuration +
-                            ", " +
-                            selectedOrientation +
-                            "\n" +
-                            visualDescription
+
+                    "60 saniye" ->
+                        60
+
+                    "90 saniye" ->
+                        90
+
+                    "120 saniye" ->
+                        120
+
+                    "180 saniye" ->
+                        180
+
+                    else ->
+                        30
                 }
 
-            Toast.makeText(
-                this,
-                "Video ayarları hazırlandı.\n" +
-                        videoDescription,
-                Toast.LENGTH_LONG
-            ).show()
+            createVideoButton.isEnabled =
+                false
 
-            // Gerçek MP4 üretim motoru daha sonra
-            // bu noktaya bağlanacak.
+            createVideoButton.text =
+                "⏳ VİDEO AYARLARI GÖNDERİLİYOR..."
+
+            prepareVideoOnServer(
+                lyrics = lyrics,
+                style = selectedStyle,
+                duration = durationSeconds,
+                orientation = selectedOrientation,
+                visualDescription = visualDescription,
+                button = createVideoButton
+            )
         }
 
         root.addView(
@@ -1113,6 +1121,206 @@ class MainActivity : Activity() {
         setContentView(
             scrollView
         )
+    }
+
+    // =============================================================
+    // VİDEO AYARLARINI RENDER SUNUCUSUNA GÖNDER
+    // =============================================================
+
+    private fun prepareVideoOnServer(
+        lyrics: String,
+        style: String,
+        duration: Int,
+        orientation: String,
+        visualDescription: String,
+        button: Button
+    ) {
+
+        Toast.makeText(
+            this,
+            "Video ayarları Render'a gönderiliyor...",
+            Toast.LENGTH_LONG
+        ).show()
+
+        Thread {
+
+            var connection:
+                    HttpURLConnection? = null
+
+            try {
+
+                val url =
+                    URL(
+                        videoServerUrl
+                    )
+
+                connection =
+                    url.openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    30000
+
+                connection.readTimeout =
+                    120000
+
+                connection.doOutput =
+                    true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                val json =
+                    "{" +
+                        "\"lyrics\":" +
+                        JSONObjectEscape(
+                            lyrics
+                        ) +
+                        "," +
+                        "\"style\":" +
+                        JSONObjectEscape(
+                            style
+                        ) +
+                        "," +
+                        "\"duration\":" +
+                        duration +
+                        "," +
+                        "\"orientation\":" +
+                        JSONObjectEscape(
+                            orientation
+                        ) +
+                        "," +
+                        "\"visualDescription\":" +
+                        JSONObjectEscape(
+                            visualDescription
+                        ) +
+                        "}"
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+
+                    output.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                if (
+                    responseCode !in 200..299
+                ) {
+
+                    val errorStream =
+                        connection.errorStream
+
+                    val errorText =
+                        if (
+                            errorStream != null
+                        ) {
+                            errorStream
+                                .bufferedReader()
+                                .use {
+                                    it.readText()
+                                }
+                        } else {
+                            "HTTP $responseCode"
+                        }
+
+                    runOnUiThread {
+
+                        button.isEnabled =
+                            true
+
+                        button.text =
+                            "🎬 VİDEOYU OLUŞTUR"
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Video sunucu hatası:\n" +
+                                    errorText.take(500),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    return@Thread
+                }
+
+                val responseText =
+                    connection.inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
+                        }
+
+                runOnUiThread {
+
+                    button.isEnabled =
+                        true
+
+                    button.text =
+                        "🎬 VİDEOYU OLUŞTUR"
+
+                    if (
+                        responseText.contains(
+                            "\"ok\":true"
+                        )
+                    ) {
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ Video ayarları Render'a başarıyla gönderildi.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                    } else {
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Render cevap verdi:\n" +
+                                    responseText.take(500),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
+            } catch (error: Exception) {
+
+                runOnUiThread {
+
+                    button.isEnabled =
+                        true
+
+                    button.text =
+                        "🎬 VİDEOYU OLUŞTUR"
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Video bağlantı hatası:\n" +
+                                error.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } finally {
+
+                connection?.disconnect()
+            }
+
+        }.start()
     }
 
     // =============================================================
