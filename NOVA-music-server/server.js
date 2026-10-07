@@ -13,26 +13,29 @@ const execFileAsync = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const STABILITY_API_KEY = process.env.STABILITY_API_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const STABILITY_API_KEY =
+  process.env.STABILITY_API_KEY;
 
-app.use(cors());
-
-/*
- * WAN 2.2 için Android'den gönderilecek Base64 fotoğraf
- * 1 MB sınırına takılmasın diye 20 MB yapıldı.
- */
-app.use(express.json({ limit: "20mb" }));
-
-// =============================================================
-// HUGGING FACE WAN 2.2
-// =============================================================
+const GEMINI_API_KEY =
+  process.env.GEMINI_API_KEY;
 
 const HF_WAN_SPACE =
   "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space";
 
 const HF_TOKEN =
   process.env.HF_TOKEN || "";
+
+app.use(cors());
+
+app.use(
+  express.json({
+    limit: "20mb"
+  })
+);
+
+// =============================================================
+// HUGGING FACE HEADERS
+// =============================================================
 
 function getHFHeaders(extraHeaders = {}) {
 
@@ -42,7 +45,7 @@ function getHFHeaders(extraHeaders = {}) {
 
   if (HF_TOKEN) {
 
-    headers["Authorization"] =
+    headers.Authorization =
       `Bearer ${HF_TOKEN}`;
 
   }
@@ -51,7 +54,7 @@ function getHFHeaders(extraHeaders = {}) {
 }
 
 // =============================================================
-// HUGGING FACE WAN DOSYA YÜKLEME
+// WAN IMAGE UPLOAD
 // =============================================================
 
 async function uploadImageToWan(
@@ -65,9 +68,7 @@ async function uploadImageToWan(
 
   const blob =
     new Blob(
-      [
-        imageBuffer
-      ],
+      [imageBuffer],
       {
         type:
           mimeType ||
@@ -125,22 +126,12 @@ async function uploadImageToWan(
         responseText
       );
 
-  } catch (error) {
+  } catch (_) {
 
     throw new Error(
       "WAN upload returned invalid JSON."
     );
   }
-
-  /*
-   * Gradio çoğunlukla:
-   *
-   * [
-   *   "/tmp/gradio/....jpg"
-   * ]
-   *
-   * şeklinde döndürür.
-   */
 
   let uploadedPath = "";
 
@@ -192,7 +183,7 @@ async function uploadImageToWan(
 }
 
 // =============================================================
-// WAN SONUÇ BEKLEME
+// WAN RESULT
 // =============================================================
 
 async function waitForWanResult(
@@ -216,7 +207,7 @@ async function waitForWanResult(
 
         headers:
           getHFHeaders({
-            "Accept":
+            Accept:
               "text/event-stream"
           })
       }
@@ -237,18 +228,6 @@ async function waitForWanResult(
     );
   }
 
-  /*
-   * Gradio SSE cevabını bloklara ayırıyoruz.
-   *
-   * Örnek:
-   *
-   * event: generating
-   * data: ...
-   *
-   * event: complete
-   * data: [...]
-   */
-
   const blocks =
     responseText
       .split(/\n\n+/)
@@ -258,8 +237,7 @@ async function waitForWanResult(
       )
       .filter(Boolean);
 
-  let lastData =
-    null;
+  let lastData = null;
 
   for (
     const block of blocks
@@ -332,12 +310,6 @@ async function waitForWanResult(
     }
   }
 
-  /*
-   * Bazı Gradio sürümlerinde event ismi
-   * farklı gelebilir. Son veri video
-   * dosyasına benziyorsa onu da döndürüyoruz.
-   */
-
   if (lastData !== null) {
 
     return lastData;
@@ -350,8 +322,33 @@ async function waitForWanResult(
 }
 
 // =============================================================
-// WAN SONUÇ İÇİNDEN VİDEO DOSYASINI BUL
+// WAN VIDEO FILE
 // =============================================================
+
+function buildWanFileUrl(
+  filePath
+) {
+
+  if (!filePath) {
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(
+      filePath
+    )
+  ) {
+
+    return filePath;
+  }
+
+  return (
+    `${HF_WAN_SPACE}/gradio_api/file=` +
+    encodeURIComponent(
+      filePath
+    )
+  );
+}
 
 function findWanVideoFile(
   result
@@ -374,12 +371,10 @@ function findWanVideoFile(
       typeof value === "string"
     ) {
 
-      found.push(
-        {
-          value:
-            value
-        }
-      );
+      found.push({
+        value:
+          value
+      });
 
       return;
     }
@@ -405,23 +400,16 @@ function findWanVideoFile(
       typeof value === "object"
     ) {
 
-      /*
-       * Önce doğrudan FileData
-       */
-
       if (
         typeof value.url === "string"
       ) {
 
-        found.push(
-          {
-            value:
-              value.url,
-
-            type:
-              "url"
-          }
-        );
+        found.push({
+          value:
+            value.url,
+          type:
+            "url"
+        });
 
       }
 
@@ -429,15 +417,12 @@ function findWanVideoFile(
         typeof value.path === "string"
       ) {
 
-        found.push(
-          {
-            value:
-              value.path,
-
-            type:
-              "path"
-          }
-        );
+        found.push({
+          value:
+            value.path,
+          type:
+            "path"
+        });
 
       }
 
@@ -445,15 +430,12 @@ function findWanVideoFile(
         typeof value.name === "string"
       ) {
 
-        found.push(
-          {
-            value:
-              value.name,
-
-            type:
-              "name"
-          }
-        );
+        found.push({
+          value:
+            value.name,
+          type:
+            "name"
+        });
 
       }
 
@@ -473,10 +455,6 @@ function findWanVideoFile(
     result
   );
 
-  /*
-   * MP4 / WebM sonuçlarını önceliklendir.
-   */
-
   const videoItem =
     found.find(
       item =>
@@ -487,9 +465,7 @@ function findWanVideoFile(
         )
     );
 
-  if (
-    videoItem
-  ) {
+  if (videoItem) {
 
     if (
       videoItem.type === "url"
@@ -504,28 +480,16 @@ function findWanVideoFile(
     );
   }
 
-  /*
-   * URL olarak gelen herhangi bir
-   * video dosyasını kontrol et.
-   */
-
   const urlItem =
     found.find(
       item =>
         item.type === "url"
     );
 
-  if (
-    urlItem
-  ) {
+  if (urlItem) {
 
     return urlItem.value;
-
   }
-
-  /*
-   * Path olarak gelen sonucu kullan.
-   */
 
   const pathItem =
     found.find(
@@ -533,53 +497,18 @@ function findWanVideoFile(
         item.type === "path"
     );
 
-  if (
-    pathItem
-  ) {
+  if (pathItem) {
 
     return buildWanFileUrl(
       pathItem.value
     );
-
   }
 
   return null;
 }
 
 // =============================================================
-// WAN DOSYA URL OLUŞTURMA
-// =============================================================
-
-function buildWanFileUrl(
-  filePath
-) {
-
-  if (
-    !filePath
-  ) {
-
-    return null;
-  }
-
-  if (
-    /^https?:\/\//i.test(
-      filePath
-    )
-  ) {
-
-    return filePath;
-  }
-
-  return (
-    `${HF_WAN_SPACE}/gradio_api/file=` +
-    encodeURIComponent(
-      filePath
-    )
-  );
-}
-
-// =============================================================
-// WAN VİDEO İNDİRME
+// WAN VIDEO DOWNLOAD
 // =============================================================
 
 async function downloadWanVideo(
@@ -613,15 +542,6 @@ async function downloadWanVideo(
     );
   }
 
-  if (
-    !response.body
-  ) {
-
-    throw new Error(
-      "WAN video response has no body."
-    );
-  }
-
   const buffer =
     Buffer.from(
       await response.arrayBuffer()
@@ -640,22 +560,7 @@ async function downloadWanVideo(
 }
 
 // =============================================================
-// WAN 2.2 VİDEO ÜRET
-// =============================================================
-//
-// Android:
-//
-// POST /wan-video
-//
-// JSON:
-//
-// {
-//   "imageBase64": "...",
-//   "imageMimeType": "image/jpeg",
-//   "prompt": "bu görüntüyü sinematik şekilde canlandır",
-//   "duration": 3.5
-// }
-//
+// WAN VIDEO
 // =============================================================
 
 app.post(
@@ -684,9 +589,7 @@ app.post(
           req.body?.duration ?? 3.5
         );
 
-      if (
-        !imageBase64
-      ) {
+      if (!imageBase64) {
 
         return res.status(400).json({
           ok: false,
@@ -695,35 +598,17 @@ app.post(
         });
       }
 
-      /*
-       * Base64 başında data:image/jpeg;base64,...
-       * varsa temizle.
-       */
-
       const cleanBase64 =
         imageBase64.replace(
           /^data:[^;]+;base64,/i,
           ""
         );
 
-      let imageBuffer;
-
-      try {
-
-        imageBuffer =
-          Buffer.from(
-            cleanBase64,
-            "base64"
-          );
-
-      } catch (decodeError) {
-
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Invalid imageBase64."
-        });
-      }
+      const imageBuffer =
+        Buffer.from(
+          cleanBase64,
+          "base64"
+        );
 
       if (
         !imageBuffer ||
@@ -736,10 +621,6 @@ app.post(
             "Image data is empty."
         });
       }
-
-      /*
-       * Güvenlik için 15 MB üstünü reddediyoruz.
-       */
 
       const MAX_IMAGE_SIZE =
         15 * 1024 * 1024;
@@ -755,10 +636,6 @@ app.post(
             "Image is too large. Maximum size is 15 MB."
         });
       }
-
-      /*
-       * Wan Space 0.5 - 5 saniye destekliyor.
-       */
 
       const duration =
         Math.max(
@@ -779,13 +656,7 @@ app.post(
 
       console.log(
         "Image size:",
-        imageBuffer.length,
-        "bytes"
-      );
-
-      console.log(
-        "Image MIME:",
-        imageMimeType
+        imageBuffer.length
       );
 
       console.log(
@@ -801,10 +672,6 @@ app.post(
       console.log(
         "================================================="
       );
-
-      // ---------------------------------------------------------
-      // 1. RESMİ WAN SPACE'E YÜKLE
-      // ---------------------------------------------------------
 
       const filename =
         imageMimeType.includes("png")
@@ -823,12 +690,7 @@ app.post(
         uploadedPath
       );
 
-      // ---------------------------------------------------------
-      // 2. GRADIO FILEDATA
-      // ---------------------------------------------------------
-
       const imageFileData = {
-
         path:
           uploadedPath,
 
@@ -837,10 +699,6 @@ app.post(
             "gradio.FileData"
         }
       };
-
-      // ---------------------------------------------------------
-      // 3. WAN GENERATE_VIDEO
-      // ---------------------------------------------------------
 
       const wanData = [
 
@@ -863,10 +721,6 @@ app.post(
         true
 
       ];
-
-      console.log(
-        "WAN CALL DATA PREPARED."
-      );
 
       const generateResponse =
         await fetch(
@@ -908,10 +762,8 @@ app.post(
 
         return res.status(502).json({
           ok: false,
-
           error:
             "WAN video generation request failed.",
-
           details:
             generateText
         });
@@ -930,10 +782,8 @@ app.post(
 
         return res.status(502).json({
           ok: false,
-
           error:
             "WAN returned invalid generation response.",
-
           details:
             generateText
         });
@@ -942,16 +792,12 @@ app.post(
       const eventId =
         generateData?.event_id;
 
-      if (
-        !eventId
-      ) {
+      if (!eventId) {
 
         return res.status(502).json({
           ok: false,
-
           error:
             "WAN did not return an event_id.",
-
           details:
             generateData
         });
@@ -961,10 +807,6 @@ app.post(
         "WAN EVENT ID:",
         eventId
       );
-
-      // ---------------------------------------------------------
-      // 4. VİDEONUN OLUŞMASINI BEKLE
-      // ---------------------------------------------------------
 
       const result =
         await waitForWanResult(
@@ -983,25 +825,17 @@ app.post(
         )
       );
 
-      // ---------------------------------------------------------
-      // 5. VİDEO DOSYASINI BUL
-      // ---------------------------------------------------------
-
       const videoUrl =
         findWanVideoFile(
           result
         );
 
-      if (
-        !videoUrl
-      ) {
+      if (!videoUrl) {
 
         return res.status(502).json({
           ok: false,
-
           error:
             "WAN completed but video file was not found.",
-
           result:
             result
         });
@@ -1012,10 +846,6 @@ app.post(
         videoUrl
       );
 
-      // ---------------------------------------------------------
-      // 6. MP4'Ü İNDİR
-      // ---------------------------------------------------------
-
       const videoBuffer =
         await downloadWanVideo(
           videoUrl
@@ -1023,13 +853,8 @@ app.post(
 
       console.log(
         "WAN VIDEO SIZE:",
-        videoBuffer.length,
-        "bytes"
+        videoBuffer.length
       );
-
-      // ---------------------------------------------------------
-      // 7. ANDROID'A MP4 OLARAK GÖNDER
-      // ---------------------------------------------------------
 
       res.setHeader(
         "Content-Type",
@@ -1053,27 +878,14 @@ app.post(
     } catch (error) {
 
       console.error(
-        "================================================="
-      );
-
-      console.error(
-        "WAN VIDEO ERROR:"
-      );
-
-      console.error(
+        "WAN VIDEO ERROR:",
         error
-      );
-
-      console.error(
-        "================================================="
       );
 
       return res.status(500).json({
         ok: false,
-
         error:
           "NOVA WAN video generation server error.",
-
         details:
           error?.message ||
           String(error)
@@ -1086,257 +898,297 @@ app.post(
 // ANA SAYFA
 // =============================================================
 
-app.get("/", (_req, res) => {
-  res.json({
-    name: "NOVA Music Server",
-    status: "ok",
-    endpoints: [
-      "POST /generate",
-      "POST /generate-lyrics",
-      "POST /prepare-video",
-      "GET /wan-api-test",
-      "POST /wan-video"
-    ]
-  });
-});
+app.get(
+  "/",
+  (_req, res) => {
+
+    res.json({
+      name:
+        "NOVA Music Server",
+
+      status:
+        "ok",
+
+      endpoints: [
+        "POST /generate",
+        "POST /generate-lyrics",
+        "POST /prepare-video",
+        "GET /wan-api-test",
+        "POST /wan-video"
+      ]
+    });
+
+  }
+);
 
 // =============================================================
 // HEALTH
 // =============================================================
 
-app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    stabilityKeyConfigured:
-      Boolean(STABILITY_API_KEY),
-    geminiKeyConfigured:
-      Boolean(GEMINI_API_KEY),
-    hfTokenConfigured:
-      Boolean(HF_TOKEN),
-    videoEngine:
-      "Wikimedia Commons + FFmpeg",
-    wanEngine:
-      "Hugging Face Wan 2.2 I2V"
-  });
-});
+app.get(
+  "/health",
+  (_req, res) => {
+
+    res.json({
+      ok:
+        true,
+
+      stabilityKeyConfigured:
+        Boolean(
+          STABILITY_API_KEY
+        ),
+
+      geminiKeyConfigured:
+        Boolean(
+          GEMINI_API_KEY
+        ),
+
+      hfTokenConfigured:
+        Boolean(
+          HF_TOKEN
+        ),
+
+      videoEngine:
+        "Wikimedia Commons + FFmpeg",
+
+      wanEngine:
+        "Hugging Face Wan 2.2 I2V"
+    });
+
+  }
+);
 
 // =============================================================
-// HUGGING FACE WAN 2.2 API TEST
-// =============================================================
-//
-// Bu endpoint SADECE Hugging Face Wan Space API bilgisini
-// kontrol eder.
-//
-// Video üretmez.
-// ZeroGPU video süresi harcamaz.
-// Mevcut video sistemine dokunmaz.
-//
+// WAN API TEST
 // =============================================================
 
-app.get("/wan-api-test", async (_req, res) => {
+app.get(
+  "/wan-api-test",
+  async (_req, res) => {
 
-  try {
+    try {
 
-    const response =
-      await fetch(
-        `${HF_WAN_SPACE}/gradio_api/info`
+      const response =
+        await fetch(
+          `${HF_WAN_SPACE}/gradio_api/info`
+        );
+
+      const responseText =
+        await response.text();
+
+      console.log(
+        "WAN API TEST STATUS:",
+        response.status
       );
 
-    const responseText =
-      await response.text();
+      console.log(
+        "WAN API TEST RESPONSE:",
+        responseText
+      );
 
-    console.log(
-      "WAN API TEST STATUS:",
-      response.status
-    );
+      return res
+        .status(
+          response.status
+        )
+        .type(
+          "application/json"
+        )
+        .send(
+          responseText
+        );
 
-    console.log(
-      "WAN API TEST RESPONSE:",
-      responseText
-    );
+    } catch (error) {
 
-    res
-      .status(response.status)
-      .type("application/json")
-      .send(responseText);
+      console.error(
+        "WAN API TEST ERROR:",
+        error
+      );
 
-  } catch (error) {
-
-    console.error(
-      "WAN API TEST ERROR:",
-      error
-    );
-
-    res.status(500).json({
-      ok: false,
-      error:
-        error.message
-    });
+      return res.status(500).json({
+        ok: false,
+        error:
+          error.message
+      });
+    }
   }
-});
+);
 
 // =============================================================
 // MÜZİK OLUŞTURMA
 // =============================================================
 
-app.post("/generate", async (req, res) => {
-  try {
+app.post(
+  "/generate",
+  async (req, res) => {
 
-    if (!STABILITY_API_KEY) {
+    try {
+
+      if (!STABILITY_API_KEY) {
+
+        return res.status(500).json({
+          error:
+            "STABILITY_API_KEY is not configured on the server."
+        });
+      }
+
+      const prompt =
+        typeof req.body?.prompt === "string"
+          ? req.body.prompt.trim()
+          : "";
+
+      if (!prompt) {
+
+        return res.status(400).json({
+          error:
+            "prompt is required."
+        });
+      }
+
+      if (
+        prompt.length > 10000
+      ) {
+
+        return res.status(400).json({
+          error:
+            "prompt is too long."
+        });
+      }
+
+      const requestedDuration =
+        Number(
+          req.body?.duration ?? 30
+        );
+
+      const duration =
+        Math.max(
+          1,
+          Math.min(
+            190,
+            requestedDuration
+          )
+        );
+
+      const form =
+        new FormData();
+
+      form.append(
+        "prompt",
+        prompt
+      );
+
+      form.append(
+        "output_format",
+        "mp3"
+      );
+
+      form.append(
+        "duration",
+        String(duration)
+      );
+
+      form.append(
+        "model",
+        "stable-audio-2.5"
+      );
+
+      form.append(
+        "steps",
+        "8"
+      );
+
+      form.append(
+        "cfg_scale",
+        "1"
+      );
+
+      const response =
+        await fetch(
+          "https://api.stability.ai/v2beta/audio/stable-audio-2/text-to-audio",
+          {
+            method:
+              "POST",
+
+            headers: {
+              authorization:
+                `Bearer ${STABILITY_API_KEY}`,
+
+              accept:
+                "audio/*",
+
+              "stability-client-id":
+                "NOVA",
+
+              "stability-client-version":
+                "1.0.0"
+            },
+
+            body:
+              form
+          }
+        );
+
+      if (!response.ok) {
+
+        const errorText =
+          await response.text();
+
+        console.error(
+          "STABLE AUDIO ERROR:",
+          response.status,
+          errorText
+        );
+
+        return res
+          .status(
+            response.status
+          )
+          .json({
+            error:
+              "Stable Audio request failed.",
+
+            details:
+              errorText
+          });
+      }
+
+      const audioBuffer =
+        Buffer.from(
+          await response.arrayBuffer()
+        );
+
+      res.setHeader(
+        "Content-Type",
+        "audio/mpeg"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        'inline; filename="nova-generated.mp3"'
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      return res.send(
+        audioBuffer
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Music generation error:",
+        error
+      );
 
       return res.status(500).json({
         error:
-          "STABILITY_API_KEY is not configured on the server."
+          "NOVA music generation server error."
       });
     }
-
-    const prompt =
-      typeof req.body?.prompt === "string"
-        ? req.body.prompt.trim()
-        : "";
-
-    if (!prompt) {
-
-      return res.status(400).json({
-        error: "prompt is required."
-      });
-    }
-
-    if (prompt.length > 10000) {
-
-      return res.status(400).json({
-        error: "prompt is too long."
-      });
-    }
-
-    const requestedDuration =
-      Number(req.body?.duration ?? 30);
-
-    const duration =
-      Math.max(
-        1,
-        Math.min(
-          190,
-          requestedDuration
-        )
-      );
-
-    const form =
-      new FormData();
-
-    form.append(
-      "prompt",
-      prompt
-    );
-
-    form.append(
-      "output_format",
-      "mp3"
-    );
-
-    form.append(
-      "duration",
-      String(duration)
-    );
-
-    form.append(
-      "model",
-      "stable-audio-2.5"
-    );
-
-    form.append(
-      "steps",
-      "8"
-    );
-
-    form.append(
-      "cfg_scale",
-      "1"
-    );
-
-    const response =
-      await fetch(
-        "https://api.stability.ai/v2beta/audio/stable-audio-2/text-to-audio",
-        {
-          method: "POST",
-
-          headers: {
-            "authorization":
-              `Bearer ${STABILITY_API_KEY}`,
-
-            "accept":
-              "audio/*",
-
-            "stability-client-id":
-              "NOVA",
-
-            "stability-client-version":
-              "1.0.0"
-          },
-
-          body: form
-        }
-      );
-
-    if (!response.ok) {
-
-      const errorText =
-        await response.text();
-
-      console.error(
-        "STABLE AUDIO ERROR:",
-        response.status,
-        errorText
-      );
-
-      return res.status(
-        response.status
-      ).json({
-        error:
-          "Stable Audio request failed.",
-
-        details:
-          errorText
-      });
-    }
-
-    const audioBuffer =
-      Buffer.from(
-        await response.arrayBuffer()
-      );
-
-    res.setHeader(
-      "Content-Type",
-      "audio/mpeg"
-    );
-
-    res.setHeader(
-      "Content-Disposition",
-      'inline; filename="nova-generated.mp3"'
-    );
-
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
-
-    return res.send(
-      audioBuffer
-    );
-
-  } catch (error) {
-
-    console.error(
-      "Music generation error:",
-      error
-    );
-
-    return res.status(500).json({
-      error:
-        "NOVA music generation server error."
-    });
   }
-});
+);
 
 // =============================================================
 // GEMINI ŞARKI SÖZÜ
@@ -1369,7 +1221,9 @@ app.post(
         });
       }
 
-      if (topic.length > 2000) {
+      if (
+        topic.length > 2000
+      ) {
 
         return res.status(400).json({
           error:
@@ -1433,7 +1287,8 @@ Sadece bu şarkı sözünü döndür.
         await fetch(
           "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
@@ -1443,17 +1298,227 @@ Sadece bu şarkı sözünü döndür.
                 GEMINI_API_KEY
             },
 
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt
-                    }
-                  ]
-                }
-              ],
+            body:
+              JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text:
+                          prompt
+                      }
+                    ]
+                  }
+                ],
 
-              generationConfig: {
-                maxOutputTokens: 3000
-             
+                generationConfig: {
+                  maxOutputTokens:
+                    3000
+                }
+              })
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+
+        console.error(
+          "GEMINI ERROR:",
+          response.status,
+          responseText
+        );
+
+        return res
+          .status(
+            response.status
+          )
+          .json({
+            error:
+              "Gemini request failed.",
+
+            details:
+              responseText
+          });
+      }
+
+      let data;
+
+      try {
+
+        data =
+          JSON.parse(
+            responseText
+          );
+
+      } catch (_) {
+
+        return res.status(502).json({
+          error:
+            "Gemini returned invalid JSON.",
+          details:
+            responseText
+        });
+      }
+
+      const lyrics =
+        data
+          ?.candidates?.[0]
+          ?.content?.parts
+          ?.map(
+            part =>
+              part?.text || ""
+          )
+          .join("")
+          .trim();
+
+      if (!lyrics) {
+
+        return res.status(502).json({
+          error:
+            "Gemini returned empty lyrics.",
+          details:
+            data
+        });
+      }
+
+      return res.json({
+        ok:
+          true,
+
+        lyrics:
+          lyrics
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Lyrics generation error:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "NOVA lyrics generation server error.",
+
+        details:
+          error?.message ||
+          String(error)
+      });
+    }
+  }
+);
+
+// =============================================================
+// PREPARE VIDEO
+// =============================================================
+//
+// Mevcut Android akışını bozmamak için endpoint korunuyor.
+//
+// =============================================================
+
+app.post(
+  "/prepare-video",
+  async (req, res) => {
+
+    try {
+
+      const lyrics =
+        typeof req.body?.lyrics === "string"
+          ? req.body.lyrics.trim()
+          : "";
+
+      const style =
+        typeof req.body?.style === "string"
+          ? req.body.style.trim()
+          : "cinematic";
+
+      const duration =
+        Number(
+          req.body?.duration ?? 30
+        );
+
+      const orientation =
+        typeof req.body?.orientation === "string"
+          ? req.body.orientation
+          : "9:16";
+
+      const visualDescription =
+        typeof req.body?.visualDescription === "string"
+          ? req.body.visualDescription.trim()
+          : "";
+
+      const safeDuration =
+        Math.max(
+          1,
+          Math.min(
+            190,
+            duration
+          )
+        );
+
+      return res.json({
+        ok:
+          true,
+
+        status:
+          "prepared",
+
+        video: {
+
+          lyrics:
+            lyrics,
+
+          style:
+            style,
+
+          duration:
+            safeDuration,
+
+          orientation:
+            orientation,
+
+          visualDescription:
+            visualDescription,
+
+          engine:
+            "Wikimedia Commons + FFmpeg"
+        }
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Prepare video error:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+
+        error:
+          "NOVA video preparation server error.",
+
+        details:
+          error?.message ||
+          String(error)
+      });
+    }
+  }
+);
+
+// =============================================================
+// SERVER
+// =============================================================
+
+app.listen(
+  PORT,
+  () => {
+
+    console.log(
+      `NOVA Music Server listening on port ${PORT}`
+    );
+
+  }
+);
