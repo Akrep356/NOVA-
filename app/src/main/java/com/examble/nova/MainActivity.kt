@@ -4,6 +4,8 @@ import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -20,13 +22,17 @@ import android.widget.Spinner
 import android.widget.ArrayAdapter
 import android.widget.RadioGroup
 import android.widget.RadioButton
+import android.widget.MediaController
 import android.media.MediaPlayer
 import android.content.ContentValues
+import android.content.Intent
 import android.provider.MediaStore
 import android.os.Build
 import android.net.Uri
+import android.util.Base64
 import android.widget.VideoView
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -35,57 +41,139 @@ import java.io.BufferedInputStream
 
 class MainActivity : Activity() {
 
+    // =========================================================
+    // NOVA SERVER
+    // =========================================================
+
     private val musicServerUrl =
         "https://nova-cf5h.onrender.com/generate"
 
     private val videoServerUrl =
         "https://nova-cf5h.onrender.com/prepare-video"
 
+    // YENİ: WAN 2.2
+    private val wanVideoServerUrl =
+        "https://nova-cf5h.onrender.com/wan-video"
+
     private val musicDurationSeconds = 190
+
+    // =========================================================
+    // MUSIC
+    // =========================================================
 
     private var mediaPlayer: MediaPlayer? = null
     private var generatedAudioFile: File? = null
 
+    // =========================================================
+    // VIDEO
+    // =========================================================
+
     private var generatedVideoFile: File? = null
     private var videoPreview: VideoView? = null
 
+    // =========================================================
+    // WAN 2.2
+    // =========================================================
+
+    private var selectedArtistImageBase64: String? = null
+    private var selectedArtistImageMimeType: String =
+        "image/jpeg"
+
+    private val PICK_ARTIST_IMAGE =
+        5001
+
+    // =========================================================
+    // LYRICS
+    // =========================================================
+
     private var lyricsWebView: WebView? = null
 
+    // =========================================================
+    // UI
+    // =========================================================
+
     private lateinit var mainRoot: LinearLayout
+
     private var mainPrompt: EditText? = null
+
     private var videoRoot: ScrollView? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    // =========================================================
+    // ACTIVITY
+    // =========================================================
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
+        super.onCreate(
+            savedInstanceState
+        )
 
         showMainScreen()
     }
 
+    // =========================================================
+    // ANA EKRAN
+    // =========================================================
+
     private fun showMainScreen() {
 
-        mainRoot = LinearLayout(this)
-        mainRoot.orientation = LinearLayout.VERTICAL
+        mainRoot =
+            LinearLayout(this)
+
+        mainRoot.orientation =
+            LinearLayout.VERTICAL
+
         mainRoot.setPadding(
             dp(16),
             dp(20),
             dp(16),
             dp(20)
         )
-        mainRoot.setBackgroundColor(Color.BLACK)
 
-        val scrollView = ScrollView(this)
-        scrollView.setBackgroundColor(Color.BLACK)
-        scrollView.addView(mainRoot)
+        mainRoot.setBackgroundColor(
+            Color.BLACK
+        )
 
-        setContentView(scrollView)
+        val scrollView =
+            ScrollView(this)
 
-        val title = TextView(this)
+        scrollView.setBackgroundColor(
+            Color.BLACK
+        )
 
-        title.text = "NOVA"
-        title.textSize = 34f
-        title.setTextColor(Color.WHITE)
-        title.setTypeface(null, Typeface.BOLD)
-        title.gravity = Gravity.CENTER
+        scrollView.addView(
+            mainRoot
+        )
+
+        setContentView(
+            scrollView
+        )
+
+        // -----------------------------------------------------
+        // TITLE
+        // -----------------------------------------------------
+
+        val title =
+            TextView(this)
+
+        title.text =
+            "NOVA"
+
+        title.textSize =
+            34f
+
+        title.setTextColor(
+            Color.WHITE
+        )
+
+        title.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        title.gravity =
+            Gravity.CENTER
 
         mainRoot.addView(
             title,
@@ -95,12 +183,25 @@ class MainActivity : Activity() {
             )
         )
 
-        val subtitle = TextView(this)
+        // -----------------------------------------------------
+        // SUBTITLE
+        // -----------------------------------------------------
 
-        subtitle.text = "AI MUSIC VIDEO & ARTIST CREATOR"
-        subtitle.textSize = 13f
-        subtitle.setTextColor(Color.LTGRAY)
-        subtitle.gravity = Gravity.CENTER
+        val subtitle =
+            TextView(this)
+
+        subtitle.text =
+            "AI MUSIC VIDEO & ARTIST CREATOR"
+
+        subtitle.textSize =
+            13f
+
+        subtitle.setTextColor(
+            Color.LTGRAY
+        )
+
+        subtitle.gravity =
+            Gravity.CENTER
 
         mainRoot.addView(
             subtitle,
@@ -110,12 +211,27 @@ class MainActivity : Activity() {
             )
         )
 
-        val promptTitle = TextView(this)
+        // -----------------------------------------------------
+        // PROMPT TITLE
+        // -----------------------------------------------------
 
-        promptTitle.text = "MÜZİK FİKRİN"
-        promptTitle.textSize = 18f
-        promptTitle.setTextColor(Color.WHITE)
-        promptTitle.setTypeface(null, Typeface.BOLD)
+        val promptTitle =
+            TextView(this)
+
+        promptTitle.text =
+            "MÜZİK FİKRİN"
+
+        promptTitle.textSize =
+            18f
+
+        promptTitle.setTextColor(
+            Color.WHITE
+        )
+
+        promptTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         mainRoot.addView(
             promptTitle,
@@ -125,14 +241,28 @@ class MainActivity : Activity() {
             )
         )
 
-        val prompt = EditText(this)
+        // -----------------------------------------------------
+        // PROMPT
+        // -----------------------------------------------------
+
+        val prompt =
+            EditText(this)
 
         prompt.hint =
             "Örn: Türkçe pop, enerjik, romantik, kadın vokal..."
 
-        prompt.setHintTextColor(Color.GRAY)
-        prompt.setTextColor(Color.WHITE)
-        prompt.setBackgroundColor(Color.DKGRAY)
+        prompt.setHintTextColor(
+            Color.GRAY
+        )
+
+        prompt.setTextColor(
+            Color.WHITE
+        )
+
+        prompt.setBackgroundColor(
+            Color.DKGRAY
+        )
+
         prompt.setPadding(
             dp(12),
             dp(12),
@@ -140,7 +270,8 @@ class MainActivity : Activity() {
             dp(12)
         )
 
-        mainPrompt = prompt
+        mainPrompt =
+            prompt
 
         mainRoot.addView(
             prompt,
@@ -150,9 +281,15 @@ class MainActivity : Activity() {
             )
         )
 
-        val lyricsButton = Button(this)
+        // -----------------------------------------------------
+        // LYRICS
+        // -----------------------------------------------------
 
-        lyricsButton.text = "✍️ SÖZ OLUŞTUR"
+        val lyricsButton =
+            Button(this)
+
+        lyricsButton.text =
+            "✍️ SÖZ OLUŞTUR"
 
         lyricsButton.setOnClickListener {
             showLyricsScreen()
@@ -166,16 +303,28 @@ class MainActivity : Activity() {
             )
         )
 
-        val musicButton = Button(this)
+        // -----------------------------------------------------
+        // MUSIC
+        // -----------------------------------------------------
 
-        musicButton.text = "🎵 MÜZİK OLUŞTUR"
+        val musicButton =
+            Button(this)
+
+        musicButton.text =
+            "🎵 MÜZİK OLUŞTUR"
 
         musicButton.setOnClickListener {
 
             val userPrompt =
-                mainPrompt?.text?.toString()?.trim() ?: ""
+                mainPrompt
+                    ?.text
+                    ?.toString()
+                    ?.trim()
+                    ?: ""
 
-            if (userPrompt.isEmpty()) {
+            if (
+                userPrompt.isEmpty()
+            ) {
 
                 Toast.makeText(
                     this,
@@ -186,7 +335,9 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
 
-            generateMusic(userPrompt)
+            generateMusic(
+                userPrompt
+            )
         }
 
         mainRoot.addView(
@@ -197,13 +348,21 @@ class MainActivity : Activity() {
             )
         )
 
-        val controls = LinearLayout(this)
+        // -----------------------------------------------------
+        // MUSIC CONTROLS
+        // -----------------------------------------------------
 
-        controls.orientation = LinearLayout.HORIZONTAL
+        val controls =
+            LinearLayout(this)
 
-        val playButton = Button(this)
+        controls.orientation =
+            LinearLayout.HORIZONTAL
 
-        playButton.text = "▶️ OYNAT"
+        val playButton =
+            Button(this)
+
+        playButton.text =
+            "▶️ OYNAT"
 
         playButton.setOnClickListener {
             playGeneratedMusic()
@@ -218,9 +377,11 @@ class MainActivity : Activity() {
             )
         )
 
-        val pauseButton = Button(this)
+        val pauseButton =
+            Button(this)
 
-        pauseButton.text = "⏸️ DURAKLAT"
+        pauseButton.text =
+            "⏸️ DURAKLAT"
 
         pauseButton.setOnClickListener {
 
@@ -228,6 +389,7 @@ class MainActivity : Activity() {
                 mediaPlayer != null &&
                 mediaPlayer!!.isPlaying
             ) {
+
                 mediaPlayer!!.pause()
             }
         }
@@ -241,9 +403,11 @@ class MainActivity : Activity() {
             )
         )
 
-        val stopButton = Button(this)
+        val stopButton =
+            Button(this)
 
-        stopButton.text = "⏹️ DURDUR"
+        stopButton.text =
+            "⏹️ DURDUR"
 
         stopButton.setOnClickListener {
             stopMusic()
@@ -266,9 +430,15 @@ class MainActivity : Activity() {
             )
         )
 
-        val saveMusicButton = Button(this)
+        // -----------------------------------------------------
+        // SAVE MUSIC
+        // -----------------------------------------------------
 
-        saveMusicButton.text = "💾 MP3'Ü TELEFONA KAYDET"
+        val saveMusicButton =
+            Button(this)
+
+        saveMusicButton.text =
+            "💾 MP3'Ü TELEFONA KAYDET"
 
         saveMusicButton.setOnClickListener {
             saveMusicToPhone()
@@ -282,9 +452,15 @@ class MainActivity : Activity() {
             )
         )
 
-        val videoButton = Button(this)
+        // -----------------------------------------------------
+        // VIDEO
+        // -----------------------------------------------------
 
-        videoButton.text = "🎬 MÜZİK VİDEOSU OLUŞTUR"
+        val videoButton =
+            Button(this)
+
+        videoButton.text =
+            "🎬 MÜZİK VİDEOSU OLUŞTUR"
 
         videoButton.setOnClickListener {
             showVideoScreen()
@@ -298,27 +474,45 @@ class MainActivity : Activity() {
             )
         )
 
-        val info = TextView(this)
+        // -----------------------------------------------------
+        // INFO
+        // -----------------------------------------------------
+
+        val info =
+            TextView(this)
 
         info.text =
             "\nNOVA hazır.\n\n" +
             "Müzik üretimi Render + Stable Audio üzerinden yapılır.\n" +
-            "Video üretimi Wikimedia Commons + FFmpeg üzerinden yapılır."
+            "Şarkı sözleri Gemini üzerinden oluşturulur.\n" +
+            "WAN 2.2 sanatçı fotoğrafını hareketli videoya dönüştürür."
 
-        info.textSize = 13f
-        info.setTextColor(Color.LTGRAY)
-        info.gravity = Gravity.CENTER
+        info.textSize =
+            13f
+
+        info.setTextColor(
+            Color.LTGRAY
+        )
+
+        info.gravity =
+            Gravity.CENTER
 
         mainRoot.addView(
             info,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(120)
+                dp(140)
             )
         )
     }
 
-    private fun generateMusic(prompt: String) {
+    // =========================================================
+    // MUSIC GENERATION
+    // =========================================================
+
+    private fun generateMusic(
+        prompt: String
+    ) {
 
         Toast.makeText(
             this,
@@ -328,19 +522,31 @@ class MainActivity : Activity() {
 
         Thread {
 
-            var connection: HttpURLConnection? = null
+            var connection:
+                    HttpURLConnection? = null
 
             try {
 
-                val url = URL(musicServerUrl)
+                val url =
+                    URL(
+                        musicServerUrl
+                    )
 
                 connection =
-                    url.openConnection() as HttpURLConnection
+                    url.openConnection()
+                            as HttpURLConnection
 
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 60_000
-                connection.readTimeout = 15 * 60 * 1000
-                connection.doOutput = true
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    60_000
+
+                connection.readTimeout =
+                    15 * 60 * 1000
+
+                connection.doOutput =
+                    true
 
                 connection.setRequestProperty(
                     "Content-Type",
@@ -358,7 +564,9 @@ class MainActivity : Activity() {
                 connection.outputStream.use { output ->
 
                     output.write(
-                        json.toByteArray(Charsets.UTF_8)
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
                     )
 
                     output.flush()
@@ -367,17 +575,24 @@ class MainActivity : Activity() {
                 val responseCode =
                     connection.responseCode
 
-                if (responseCode !in 200..299) {
+                if (
+                    responseCode !in 200..299
+                ) {
 
                     val errorText =
                         try {
 
-                            connection.errorStream
+                            connection
+                                .errorStream
                                 ?.bufferedReader()
-                                ?.use { it.readText() }
+                                ?.use {
+                                    it.readText()
+                                }
                                 ?: "Sunucu hatası"
 
-                        } catch (e: Exception) {
+                        } catch (
+                            _: Exception
+                        ) {
 
                             "Sunucu hatası"
                         }
@@ -400,28 +615,37 @@ class MainActivity : Activity() {
                         "nova_generated.mp3"
                     )
 
-                connection.inputStream.use { input ->
+                connection
+                    .inputStream
+                    .use { input ->
 
-                    FileOutputStream(audioFile).use { output ->
+                        FileOutputStream(
+                            audioFile
+                        ).use { output ->
 
-                        val buffer = ByteArray(8192)
+                            val buffer =
+                                ByteArray(
+                                    8192
+                                )
 
-                        var count: Int
+                            var count: Int
 
-                        while (
-                            input.read(buffer).also {
-                                count = it
-                            } != -1
-                        ) {
+                            while (
+                                input.read(
+                                    buffer
+                                ).also {
+                                    count = it
+                                } != -1
+                            ) {
 
-                            output.write(
-                                buffer,
-                                0,
-                                count
-                            )
+                                output.write(
+                                    buffer,
+                                    0,
+                                    count
+                                )
+                            }
                         }
                     }
-                }
 
                 if (
                     !audioFile.exists() ||
@@ -433,7 +657,8 @@ class MainActivity : Activity() {
                     )
                 }
 
-                generatedAudioFile = audioFile
+                generatedAudioFile =
+                    audioFile
 
                 runOnUiThread {
 
@@ -443,10 +668,14 @@ class MainActivity : Activity() {
                         Toast.LENGTH_LONG
                     ).show()
 
-                    playGeneratedMp3(audioFile)
+                    playGeneratedMp3(
+                        audioFile
+                    )
                 }
 
-            } catch (e: Exception) {
+            } catch (
+                e: Exception
+            ) {
 
                 runOnUiThread {
 
@@ -465,9 +694,14 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    // =========================================================
+    // MUSIC PLAY
+    // =========================================================
+
     private fun playGeneratedMusic() {
 
-        val file = generatedAudioFile
+        val file =
+            generatedAudioFile
 
         if (
             file == null ||
@@ -483,7 +717,9 @@ class MainActivity : Activity() {
             return
         }
 
-        playGeneratedMp3(file)
+        playGeneratedMp3(
+            file
+        )
     }
 
     private fun playGeneratedMp3(
@@ -494,16 +730,20 @@ class MainActivity : Activity() {
 
             mediaPlayer?.release()
 
-            mediaPlayer = MediaPlayer()
+            mediaPlayer =
+                MediaPlayer()
 
             mediaPlayer!!.setDataSource(
                 audioFile.absolutePath
             )
 
             mediaPlayer!!.prepare()
+
             mediaPlayer!!.start()
 
-        } catch (e: Exception) {
+        } catch (
+            e: Exception
+        ) {
 
             Toast.makeText(
                 this,
@@ -513,20 +753,33 @@ class MainActivity : Activity() {
         }
     }
 
+    // =========================================================
+    // STOP MUSIC
+    // =========================================================
+
     private fun stopMusic() {
 
         try {
             mediaPlayer?.stop()
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
         }
 
         mediaPlayer?.release()
-        mediaPlayer = null
+
+        mediaPlayer =
+            null
     }
+
+    // =========================================================
+    // SAVE MUSIC
+    // =========================================================
 
     private fun saveMusicToPhone() {
 
-        val sourceFile = generatedAudioFile
+        val sourceFile =
+            generatedAudioFile
 
         if (
             sourceFile == null ||
@@ -544,7 +797,8 @@ class MainActivity : Activity() {
 
         try {
 
-            val resolver = contentResolver
+            val resolver =
+                contentResolver
 
             val values =
                 ContentValues().apply {
@@ -589,35 +843,44 @@ class MainActivity : Activity() {
                 )
             }
 
-            resolver.openOutputStream(uri).use { output ->
+            resolver
+                .openOutputStream(uri)
+                .use { output ->
 
-                if (output == null) {
+                    if (output == null) {
 
-                    throw Exception(
-                        "Dosya yazma akışı açılamadı."
-                    )
-                }
-
-                sourceFile.inputStream().use { input ->
-
-                    val buffer = ByteArray(8192)
-
-                    var count: Int
-
-                    while (
-                        input.read(buffer).also {
-                            count = it
-                        } != -1
-                    ) {
-
-                        output.write(
-                            buffer,
-                            0,
-                            count
+                        throw Exception(
+                            "Dosya yazma akışı açılamadı."
                         )
                     }
+
+                    sourceFile
+                        .inputStream()
+                        .use { input ->
+
+                            val buffer =
+                                ByteArray(
+                                    8192
+                                )
+
+                            var count: Int
+
+                            while (
+                                input
+                                    .read(buffer)
+                                    .also {
+                                        count = it
+                                    } != -1
+                            ) {
+
+                                output.write(
+                                    buffer,
+                                    0,
+                                    count
+                                )
+                            }
+                        }
                 }
-            }
 
             if (
                 Build.VERSION.SDK_INT >=
@@ -647,7 +910,9 @@ class MainActivity : Activity() {
                 Toast.LENGTH_LONG
             ).show()
 
-        } catch (e: Exception) {
+        } catch (
+            e: Exception
+        ) {
 
             Toast.makeText(
                 this,
@@ -657,11 +922,17 @@ class MainActivity : Activity() {
         }
     }
 
+    // =========================================================
+    // LYRICS SCREEN
+    // =========================================================
+
     private fun showLyricsScreen() {
 
-        val root = LinearLayout(this)
+        val root =
+            LinearLayout(this)
 
-        root.orientation = LinearLayout.VERTICAL
+        root.orientation =
+            LinearLayout.VERTICAL
 
         root.setPadding(
             dp(12),
@@ -670,15 +941,30 @@ class MainActivity : Activity() {
             dp(12)
         )
 
-        root.setBackgroundColor(Color.BLACK)
+        root.setBackgroundColor(
+            Color.BLACK
+        )
 
-        val title = TextView(this)
+        val title =
+            TextView(this)
 
-        title.text = "✍️ NOVA SÖZ YAZARI"
-        title.textSize = 24f
-        title.setTextColor(Color.WHITE)
-        title.setTypeface(null, Typeface.BOLD)
-        title.gravity = Gravity.CENTER
+        title.text =
+            "✍️ NOVA SÖZ YAZARI"
+
+        title.textSize =
+            24f
+
+        title.setTextColor(
+            Color.WHITE
+        )
+
+        title.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        title.gravity =
+            Gravity.CENTER
 
         root.addView(
             title,
@@ -688,18 +974,30 @@ class MainActivity : Activity() {
             )
         )
 
-        val webView = WebView(this)
+        val webView =
+            WebView(this)
 
-        lyricsWebView = webView
+        lyricsWebView =
+            webView
 
-        webView.setBackgroundColor(Color.BLACK)
+        webView.setBackgroundColor(
+            Color.BLACK
+        )
 
-        val settings = webView.settings
+        val settings =
+            webView.settings
 
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
+        settings.javaScriptEnabled =
+            true
+
+        settings.domStorageEnabled =
+            true
+
+        settings.loadWithOverviewMode =
+            true
+
+        settings.useWideViewPort =
+            true
 
         webView.webViewClient =
             WebViewClient()
@@ -722,9 +1020,11 @@ class MainActivity : Activity() {
             )
         )
 
-        val backButton = Button(this)
+        val backButton =
+            Button(this)
 
-        backButton.text = "⬅️ ANA EKRANA DÖN"
+        backButton.text =
+            "⬅️ ANA EKRANA DÖN"
 
         backButton.setOnClickListener {
             showMainScreen()
@@ -738,20 +1038,30 @@ class MainActivity : Activity() {
             )
         )
 
-        setContentView(root)
+        setContentView(
+            root
+        )
     }
+
+    // =========================================================
+    // LYRICS BRIDGE
+    // =========================================================
 
     inner class LyricsBridge {
 
         @JavascriptInterface
-        fun generateMusic(lyrics: String) {
+        fun generateMusic(
+            lyrics: String
+        ) {
 
             runOnUiThread {
 
                 val cleanLyrics =
                     lyrics.trim()
 
-                if (cleanLyrics.isEmpty()) {
+                if (
+                    cleanLyrics.isEmpty()
+                ) {
 
                     Toast.makeText(
                         this@MainActivity,
@@ -768,12 +1078,16 @@ class MainActivity : Activity() {
                     cleanLyrics
                 )
 
-                generateMusic(cleanLyrics)
+                generateMusic(
+                    cleanLyrics
+                )
             }
         }
 
         @JavascriptInterface
-        fun setLyrics(lyrics: String) {
+        fun setLyrics(
+            lyrics: String
+        ) {
 
             runOnUiThread {
 
@@ -784,17 +1098,27 @@ class MainActivity : Activity() {
         }
     }
 
+    // =========================================================
+    // VIDEO SCREEN
+    // =========================================================
+
     private fun showVideoScreen() {
 
-        val scroll = ScrollView(this)
+        val scroll =
+            ScrollView(this)
 
-        videoRoot = scroll
+        videoRoot =
+            scroll
 
-        scroll.setBackgroundColor(Color.BLACK)
+        scroll.setBackgroundColor(
+            Color.BLACK
+        )
 
-        val root = LinearLayout(this)
+        val root =
+            LinearLayout(this)
 
-        root.orientation = LinearLayout.VERTICAL
+        root.orientation =
+            LinearLayout.VERTICAL
 
         root.setPadding(
             dp(14),
@@ -803,19 +1127,42 @@ class MainActivity : Activity() {
             dp(30)
         )
 
-        root.setBackgroundColor(Color.BLACK)
+        root.setBackgroundColor(
+            Color.BLACK
+        )
 
-        scroll.addView(root)
+        scroll.addView(
+            root
+        )
 
-        setContentView(scroll)
+        setContentView(
+            scroll
+        )
 
-        val title = TextView(this)
+        // -----------------------------------------------------
+        // TITLE
+        // -----------------------------------------------------
 
-        title.text = "🎬 NOVA MÜZİK VİDEOSU"
-        title.textSize = 25f
-        title.setTextColor(Color.WHITE)
-        title.setTypeface(null, Typeface.BOLD)
-        title.gravity = Gravity.CENTER
+        val title =
+            TextView(this)
+
+        title.text =
+            "🎬 NOVA MÜZİK VİDEOSU"
+
+        title.textSize =
+            25f
+
+        title.setTextColor(
+            Color.WHITE
+        )
+
+        title.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        title.gravity =
+            Gravity.CENTER
 
         root.addView(
             title,
@@ -825,12 +1172,358 @@ class MainActivity : Activity() {
             )
         )
 
-        val lyricsTitle = TextView(this)
+        // -----------------------------------------------------
+        // WAN ARTIST SECTION
+        // -----------------------------------------------------
 
-        lyricsTitle.text = "ŞARKI SÖZLERİ"
-        lyricsTitle.textSize = 17f
-        lyricsTitle.setTextColor(Color.WHITE)
-        lyricsTitle.setTypeface(null, Typeface.BOLD)
+        val artistTitle =
+            TextView(this)
+
+        artistTitle.text =
+            "👤 AI SANATÇI"
+
+        artistTitle.textSize =
+            19f
+
+        artistTitle.setTextColor(
+            Color.WHITE
+        )
+
+        artistTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        root.addView(
+            artistTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val artistInfo =
+            TextView(this)
+
+        artistInfo.text =
+            "Sanatçının fotoğrafını seç. " +
+            "NOVA bu fotoğrafı Wan 2.2 ile hareketli videoya dönüştürecek."
+
+        artistInfo.textSize =
+            13f
+
+        artistInfo.setTextColor(
+            Color.LTGRAY
+        )
+
+        root.addView(
+            artistInfo,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(65)
+            )
+        )
+
+        // -----------------------------------------------------
+        // SELECT PHOTO
+        // -----------------------------------------------------
+
+        val selectArtistButton =
+            Button(this)
+
+        selectArtistButton.text =
+            "📷 SANATÇI FOTOĞRAFI SEÇ"
+
+        selectArtistButton.setOnClickListener {
+
+            val intent =
+                Intent(
+                    Intent.ACTION_OPEN_DOCUMENT
+                )
+
+            intent.addCategory(
+                Intent.CATEGORY_OPENABLE
+            )
+
+            intent.type =
+                "image/*"
+
+            startActivityForResult(
+                intent,
+                PICK_ARTIST_IMAGE
+            )
+        }
+
+        root.addView(
+            selectArtistButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(60)
+            )
+        )
+
+        // -----------------------------------------------------
+        // WAN PROMPT
+        // -----------------------------------------------------
+
+        val wanPromptTitle =
+            TextView(this)
+
+        wanPromptTitle.text =
+            "🎥 HAREKET PROMPTU"
+
+        wanPromptTitle.textSize =
+            17f
+
+        wanPromptTitle.setTextColor(
+            Color.WHITE
+        )
+
+        wanPromptTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        root.addView(
+            wanPromptTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val wanPromptEdit =
+            EditText(this)
+
+        wanPromptEdit.hint =
+            "Örn: sanatçı kameraya doğru yürüsün, saçları hafifçe hareket etsin..."
+
+        wanPromptEdit.setHintTextColor(
+            Color.GRAY
+        )
+
+        wanPromptEdit.setTextColor(
+            Color.WHITE
+        )
+
+        wanPromptEdit.setBackgroundColor(
+            Color.DKGRAY
+        )
+
+        wanPromptEdit.setPadding(
+            dp(12),
+            dp(12),
+            dp(12),
+            dp(12)
+        )
+
+        wanPromptEdit.setText(
+            "genç erkek sanatçı kameraya doğru yavaşça yürüsün, doğal yüz hareketleri, hafif saç hareketi, sinematik kamera hareketi"
+        )
+
+        root.addView(
+            wanPromptEdit,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(120)
+            )
+        )
+
+        // -----------------------------------------------------
+        // WAN DURATION
+        // -----------------------------------------------------
+
+        val wanDurationTitle =
+            TextView(this)
+
+        wanDurationTitle.text =
+            "⏱️ WAN VİDEO SÜRESİ"
+
+        wanDurationTitle.textSize =
+            17f
+
+        wanDurationTitle.setTextColor(
+            Color.WHITE
+        )
+
+        wanDurationTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        root.addView(
+            wanDurationTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val wanDurations =
+            arrayOf(
+                "3 saniye",
+                "3.5 saniye",
+                "4 saniye",
+                "5 saniye"
+            )
+
+        val wanDurationSpinner =
+            Spinner(this)
+
+        val wanDurationAdapter =
+            ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                wanDurations
+            )
+
+        wanDurationSpinner.adapter =
+            wanDurationAdapter
+
+        wanDurationSpinner.setSelection(
+            1
+        )
+
+        root.addView(
+            wanDurationSpinner,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        // -----------------------------------------------------
+        // WAN BUTTON
+        // -----------------------------------------------------
+
+        val wanButton =
+            Button(this)
+
+        wanButton.text =
+            "🤖 WAN 2.2 İLE SANATÇIYI CANLANDIR"
+
+        wanButton.setOnClickListener {
+
+            val image =
+                selectedArtistImageBase64
+
+            if (
+                image.isNullOrEmpty()
+            ) {
+
+                Toast.makeText(
+                    this,
+                    "Önce sanatçı fotoğrafını seç.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@setOnClickListener
+            }
+
+            val prompt =
+                wanPromptEdit
+                    .text
+                    .toString()
+                    .trim()
+
+            if (
+                prompt.isEmpty()
+            ) {
+
+                Toast.makeText(
+                    this,
+                    "Hareket promptu yaz.",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                return@setOnClickListener
+            }
+
+            val durationText =
+                wanDurationSpinner
+                    .selectedItem
+                    .toString()
+
+            val duration =
+                when {
+                    durationText.contains(
+                        "3.5"
+                    ) -> 3.5
+
+                    durationText.contains(
+                        "4"
+                    ) -> 4.0
+
+                    durationText.contains(
+                        "5"
+                    ) -> 5.0
+
+                    else -> 3.0
+                }
+
+            generateWanVideo(
+                imageBase64 = image,
+                imageMimeType =
+                    selectedArtistImageMimeType,
+                prompt = prompt,
+                duration = duration
+            )
+        }
+
+        root.addView(
+            wanButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(70)
+            )
+        )
+
+        // -----------------------------------------------------
+        // SEPARATOR
+        // -----------------------------------------------------
+
+        val separator =
+            TextView(this)
+
+        separator.text =
+            "\n────────────────────\n"
+
+        separator.setTextColor(
+            Color.GRAY
+        )
+
+        separator.gravity =
+            Gravity.CENTER
+
+        root.addView(
+            separator,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(50)
+            )
+        )
+
+        // -----------------------------------------------------
+        // OLD VIDEO SYSTEM
+        // -----------------------------------------------------
+
+        val lyricsTitle =
+            TextView(this)
+
+        lyricsTitle.text =
+            "ŞARKI SÖZLERİ"
+
+        lyricsTitle.textSize =
+            17f
+
+        lyricsTitle.setTextColor(
+            Color.WHITE
+        )
+
+        lyricsTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             lyricsTitle,
@@ -840,20 +1533,36 @@ class MainActivity : Activity() {
             )
         )
 
-        val lyricsEdit = EditText(this)
+        val lyricsEdit =
+            EditText(this)
 
         lyricsEdit.hint =
             "Şarkı sözlerini buraya yaz..."
 
-        lyricsEdit.setHintTextColor(Color.GRAY)
-        lyricsEdit.setTextColor(Color.WHITE)
-        lyricsEdit.setBackgroundColor(Color.DKGRAY)
-        lyricsEdit.gravity = Gravity.TOP
+        lyricsEdit.setHintTextColor(
+            Color.GRAY
+        )
+
+        lyricsEdit.setTextColor(
+            Color.WHITE
+        )
+
+        lyricsEdit.setBackgroundColor(
+            Color.DKGRAY
+        )
+
+        lyricsEdit.gravity =
+            Gravity.TOP
 
         val currentPrompt =
-            mainPrompt?.text?.toString()?.trim()
+            mainPrompt
+                ?.text
+                ?.toString()
+                ?.trim()
 
-        if (!currentPrompt.isNullOrEmpty()) {
+        if (
+            !currentPrompt.isNullOrEmpty()
+        ) {
 
             lyricsEdit.setText(
                 currentPrompt
@@ -868,12 +1577,27 @@ class MainActivity : Activity() {
             )
         )
 
-        val styleTitle = TextView(this)
+        // -----------------------------------------------------
+        // STYLE
+        // -----------------------------------------------------
 
-        styleTitle.text = "VİDEO STİLİ"
-        styleTitle.textSize = 17f
-        styleTitle.setTextColor(Color.WHITE)
-        styleTitle.setTypeface(null, Typeface.BOLD)
+        val styleTitle =
+            TextView(this)
+
+        styleTitle.text =
+            "VİDEO STİLİ"
+
+        styleTitle.textSize =
+            17f
+
+        styleTitle.setTextColor(
+            Color.WHITE
+        )
+
+        styleTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             styleTitle,
@@ -883,16 +1607,17 @@ class MainActivity : Activity() {
             )
         )
 
-        val styles = arrayOf(
-            "Sinematik",
-            "Duygusal",
-            "Enerjik",
-            "Romantik",
-            "Karanlık",
-            "Neon",
-            "Doğa",
-            "Konser"
-        )
+        val styles =
+            arrayOf(
+                "Sinematik",
+                "Duygusal",
+                "Enerjik",
+                "Romantik",
+                "Karanlık",
+                "Neon",
+                "Doğa",
+                "Konser"
+            )
 
         val styleSpinner =
             Spinner(this)
@@ -915,12 +1640,27 @@ class MainActivity : Activity() {
             )
         )
 
-        val durationTitle = TextView(this)
+        // -----------------------------------------------------
+        // OLD VIDEO DURATION
+        // -----------------------------------------------------
 
-        durationTitle.text = "VİDEO SÜRESİ"
-        durationTitle.textSize = 17f
-        durationTitle.setTextColor(Color.WHITE)
-        durationTitle.setTypeface(null, Typeface.BOLD)
+        val durationTitle =
+            TextView(this)
+
+        durationTitle.text =
+            "VİDEO SÜRESİ"
+
+        durationTitle.textSize =
+            17f
+
+        durationTitle.setTextColor(
+            Color.WHITE
+        )
+
+        durationTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             durationTitle,
@@ -930,13 +1670,14 @@ class MainActivity : Activity() {
             )
         )
 
-        val durations = arrayOf(
-            "30 saniye",
-            "60 saniye",
-            "90 saniye",
-            "120 saniye",
-            "180 saniye"
-        )
+        val durations =
+            arrayOf(
+                "30 saniye",
+                "60 saniye",
+                "90 saniye",
+                "120 saniye",
+                "180 saniye"
+            )
 
         val durationSpinner =
             Spinner(this)
@@ -959,12 +1700,27 @@ class MainActivity : Activity() {
             )
         )
 
-        val orientationTitle = TextView(this)
+        // -----------------------------------------------------
+        // ORIENTATION
+        // -----------------------------------------------------
 
-        orientationTitle.text = "VİDEO ORYANTASYONU"
-        orientationTitle.textSize = 17f
-        orientationTitle.setTextColor(Color.WHITE)
-        orientationTitle.setTypeface(null, Typeface.BOLD)
+        val orientationTitle =
+            TextView(this)
+
+        orientationTitle.text =
+            "VİDEO ORYANTASYONU"
+
+        orientationTitle.textSize =
+            17f
+
+        orientationTitle.setTextColor(
+            Color.WHITE
+        )
+
+        orientationTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             orientationTitle,
@@ -983,9 +1739,15 @@ class MainActivity : Activity() {
         val radio916 =
             RadioButton(this)
 
-        radio916.text = "9:16 - Dikey"
-        radio916.setTextColor(Color.WHITE)
-        radio916.isChecked = true
+        radio916.text =
+            "9:16 - Dikey"
+
+        radio916.setTextColor(
+            Color.WHITE
+        )
+
+        radio916.isChecked =
+            true
 
         orientationGroup.addView(
             radio916
@@ -994,8 +1756,12 @@ class MainActivity : Activity() {
         val radio169 =
             RadioButton(this)
 
-        radio169.text = "16:9 - Yatay"
-        radio169.setTextColor(Color.WHITE)
+        radio169.text =
+            "16:9 - Yatay"
+
+        radio169.setTextColor(
+            Color.WHITE
+        )
 
         orientationGroup.addView(
             radio169
@@ -1004,8 +1770,12 @@ class MainActivity : Activity() {
         val radio11 =
             RadioButton(this)
 
-        radio11.text = "1:1 - Kare"
-        radio11.setTextColor(Color.WHITE)
+        radio11.text =
+            "1:1 - Kare"
+
+        radio11.setTextColor(
+            Color.WHITE
+        )
 
         orientationGroup.addView(
             radio11
@@ -1019,14 +1789,27 @@ class MainActivity : Activity() {
             )
         )
 
-        val descriptionTitle = TextView(this)
+        // -----------------------------------------------------
+        // DESCRIPTION
+        // -----------------------------------------------------
+
+        val descriptionTitle =
+            TextView(this)
 
         descriptionTitle.text =
             "GÖRSEL AÇIKLAMA"
 
-        descriptionTitle.textSize = 17f
-        descriptionTitle.setTextColor(Color.WHITE)
-        descriptionTitle.setTypeface(null, Typeface.BOLD)
+        descriptionTitle.textSize =
+            17f
+
+        descriptionTitle.setTextColor(
+            Color.WHITE
+        )
+
+        descriptionTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             descriptionTitle,
@@ -1042,9 +1825,17 @@ class MainActivity : Activity() {
         descriptionEdit.hint =
             "Örn: gece şehri, neon ışıklar, yağmur..."
 
-        descriptionEdit.setHintTextColor(Color.GRAY)
-        descriptionEdit.setTextColor(Color.WHITE)
-        descriptionEdit.setBackgroundColor(Color.DKGRAY)
+        descriptionEdit.setHintTextColor(
+            Color.GRAY
+        )
+
+        descriptionEdit.setTextColor(
+            Color.WHITE
+        )
+
+        descriptionEdit.setBackgroundColor(
+            Color.DKGRAY
+        )
 
         root.addView(
             descriptionEdit,
@@ -1053,6 +1844,10 @@ class MainActivity : Activity() {
                 dp(100)
             )
         )
+
+        // -----------------------------------------------------
+        // OLD VIDEO BUTTON
+        // -----------------------------------------------------
 
         val createVideoButton =
             Button(this)
@@ -1063,9 +1858,14 @@ class MainActivity : Activity() {
         createVideoButton.setOnClickListener {
 
             val lyrics =
-                lyricsEdit.text.toString().trim()
+                lyricsEdit
+                    .text
+                    .toString()
+                    .trim()
 
-            if (lyrics.isEmpty()) {
+            if (
+                lyrics.isEmpty()
+            ) {
 
                 Toast.makeText(
                     this,
@@ -1077,10 +1877,14 @@ class MainActivity : Activity() {
             }
 
             val style =
-                styleSpinner.selectedItem.toString()
+                styleSpinner
+                    .selectedItem
+                    .toString()
 
             val durationText =
-                durationSpinner.selectedItem.toString()
+                durationSpinner
+                    .selectedItem
+                    .toString()
 
             val duration =
                 durationText
@@ -1093,13 +1897,20 @@ class MainActivity : Activity() {
 
             val orientation =
                 when {
-                    radio169.isChecked -> "16:9"
-                    radio11.isChecked -> "1:1"
-                    else -> "9:16"
+
+                    radio169.isChecked ->
+                        "16:9"
+
+                    radio11.isChecked ->
+                        "1:1"
+
+                    else ->
+                        "9:16"
                 }
 
             val visualDescription =
-                descriptionEdit.text
+                descriptionEdit
+                    .text
                     .toString()
                     .trim()
 
@@ -1120,15 +1931,27 @@ class MainActivity : Activity() {
             )
         )
 
+        // -----------------------------------------------------
+        // PREVIEW
+        // -----------------------------------------------------
+
         val previewTitle =
             TextView(this)
 
         previewTitle.text =
             "🎞️ VİDEO ÖNİZLEME"
 
-        previewTitle.textSize = 18f
-        previewTitle.setTextColor(Color.WHITE)
-        previewTitle.setTypeface(null, Typeface.BOLD)
+        previewTitle.textSize =
+            18f
+
+        previewTitle.setTextColor(
+            Color.WHITE
+        )
+
+        previewTitle.setTypeface(
+            null,
+            Typeface.BOLD
+        )
 
         root.addView(
             previewTitle,
@@ -1141,10 +1964,22 @@ class MainActivity : Activity() {
         val preview =
             VideoView(this)
 
-        videoPreview = preview
+        videoPreview =
+            preview
 
         preview.setBackgroundColor(
             Color.BLACK
+        )
+
+        val mediaController =
+            MediaController(this)
+
+        mediaController.setAnchorView(
+            preview
+        )
+
+        preview.setMediaController(
+            mediaController
         )
 
         root.addView(
@@ -1154,6 +1989,10 @@ class MainActivity : Activity() {
                 dp(420)
             )
         )
+
+        // -----------------------------------------------------
+        // SAVE VIDEO
+        // -----------------------------------------------------
 
         val saveVideoButton =
             Button(this)
@@ -1173,6 +2012,10 @@ class MainActivity : Activity() {
             )
         )
 
+        // -----------------------------------------------------
+        // BACK
+        // -----------------------------------------------------
+
         val backButton =
             Button(this)
 
@@ -1191,6 +2034,473 @@ class MainActivity : Activity() {
             )
         )
     }
+
+    // =========================================================
+    // FOTOĞRAF SEÇİLDİ
+    // =========================================================
+
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
+
+        if (
+            requestCode !=
+            PICK_ARTIST_IMAGE
+        ) {
+            return
+        }
+
+        if (
+            resultCode !=
+            RESULT_OK
+        ) {
+
+            Toast.makeText(
+                this,
+                "Fotoğraf seçilmedi.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        val uri =
+            data?.data
+
+        if (uri == null) {
+
+            Toast.makeText(
+                this,
+                "Fotoğraf alınamadı.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        Thread {
+
+            try {
+
+                val mime =
+                    contentResolver
+                        .getType(uri)
+                        ?: "image/jpeg"
+
+                val input =
+                    contentResolver
+                        .openInputStream(uri)
+
+                if (input == null) {
+
+                    throw Exception(
+                        "Fotoğraf açılamadı."
+                    )
+                }
+
+                input.use {
+
+                    val originalBitmap =
+                        BitmapFactory.decodeStream(
+                            it
+                        )
+
+                    if (
+                        originalBitmap == null
+                    ) {
+
+                        throw Exception(
+                            "Fotoğraf okunamadı."
+                        )
+                    }
+
+                    // -------------------------------------------------
+                    // WAN için fotoğrafı küçült.
+                    // Böylece Base64 çok büyümez.
+                    // -------------------------------------------------
+
+                    val maxDimension =
+                        1280
+
+                    val width =
+                        originalBitmap.width
+
+                    val height =
+                        originalBitmap.height
+
+                    val scale =
+                        if (
+                            width > maxDimension ||
+                            height > maxDimension
+                        ) {
+
+                            minOf(
+                                maxDimension
+                                    .toFloat()
+                                    / width.toFloat(),
+
+                                maxDimension
+                                    .toFloat()
+                                    / height.toFloat()
+                            )
+
+                        } else {
+
+                            1f
+                        }
+
+                    val newWidth =
+                        (
+                            width * scale
+                            ).toInt()
+
+                    val newHeight =
+                        (
+                            height * scale
+                            ).toInt()
+
+                    val bitmap =
+                        if (
+                            scale != 1f
+                        ) {
+
+                            Bitmap.createScaledBitmap(
+                                originalBitmap,
+                                newWidth,
+                                newHeight,
+                                true
+                            )
+
+                        } else {
+
+                            originalBitmap
+                        }
+
+                    val outputStream =
+                        ByteArrayOutputStream()
+
+                    bitmap.compress(
+                        Bitmap.CompressFormat.JPEG,
+                        85,
+                        outputStream
+                    )
+
+                    bitmap.recycle()
+
+                    if (
+                        originalBitmap != bitmap
+                    ) {
+                        originalBitmap.recycle()
+                    }
+
+                    val imageBytes =
+                        outputStream.toByteArray()
+
+                    outputStream.close()
+
+                    val base64 =
+                        Base64.encodeToString(
+                            imageBytes,
+                            Base64.NO_WRAP
+                        )
+
+                    selectedArtistImageBase64 =
+                        base64
+
+                    selectedArtistImageMimeType =
+                        "image/jpeg"
+
+                    runOnUiThread {
+
+                        Toast.makeText(
+                            this,
+                            "📷 Sanatçı fotoğrafı hazır.\nŞimdi WAN 2.2 butonuna bas.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
+            } catch (
+                e: Exception
+            ) {
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "Fotoğraf hatası:\n${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+
+        }.start()
+    }
+
+    // =========================================================
+    // WAN 2.2 VIDEO
+    // =========================================================
+
+    private fun generateWanVideo(
+        imageBase64: String,
+        imageMimeType: String,
+        prompt: String,
+        duration: Double
+    ) {
+
+        Toast.makeText(
+            this,
+            "🤖 WAN 2.2 çalışıyor...\n" +
+                "Fotoğraf hareketlendiriliyor. Lütfen bekle.",
+            Toast.LENGTH_LONG
+        ).show()
+
+        Thread {
+
+            var connection:
+                    HttpURLConnection? = null
+
+            try {
+
+                val url =
+                    URL(
+                        wanVideoServerUrl
+                    )
+
+                connection =
+                    url.openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    60_000
+
+                connection.readTimeout =
+                    15 * 60 * 1000
+
+                connection.doOutput =
+                    true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "video/mp4, application/json"
+                )
+
+                val json =
+                    """
+                    {
+                      "imageBase64":"${jsonEscape(imageBase64)}",
+                      "imageMimeType":"${jsonEscape(imageMimeType)}",
+                      "prompt":"${jsonEscape(prompt)}",
+                      "duration":$duration
+                    }
+                    """.trimIndent()
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+
+                    output.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                if (
+                    responseCode !in 200..299
+                ) {
+
+                    val errorText =
+                        try {
+
+                            connection
+                                .errorStream
+                                ?.bufferedReader()
+                                ?.use {
+                                    it.readText()
+                                }
+                                ?: "WAN sunucu hatası"
+
+                        } catch (
+                            _: Exception
+                        ) {
+
+                            "WAN sunucu hatası"
+                        }
+
+                    runOnUiThread {
+
+                        Toast.makeText(
+                            this,
+                            "WAN video oluşturulamadı:\n$errorText",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    return@Thread
+                }
+
+                // -------------------------------------------------
+                // MP4 dosyasını cache'e kaydet
+                // -------------------------------------------------
+
+                val videoFile =
+                    File(
+                        cacheDir,
+                        "nova_wan_video.mp4"
+                    )
+
+                connection
+                    .inputStream
+                    .use { input ->
+
+                        BufferedInputStream(
+                            input
+                        ).use {
+                            bufferedInput ->
+
+                            FileOutputStream(
+                                videoFile
+                            ).use { output ->
+
+                                val buffer =
+                                    ByteArray(
+                                        16 * 1024
+                                    )
+
+                                var count: Int
+
+                                while (
+                                    bufferedInput
+                                        .read(buffer)
+                                        .also {
+                                            count = it
+                                        } != -1
+                                ) {
+
+                                    output.write(
+                                        buffer,
+                                        0,
+                                        count
+                                    )
+                                }
+
+                                output.flush()
+                            }
+                        }
+                    }
+
+                if (
+                    !videoFile.exists() ||
+                    videoFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "WAN boş video dosyası gönderdi."
+                    )
+                }
+
+                generatedVideoFile =
+                    videoFile
+
+                runOnUiThread {
+
+                    val preview =
+                        videoPreview
+
+                    if (
+                        preview != null
+                    ) {
+
+                        try {
+
+                            val controller =
+                                MediaController(
+                                    this
+                                )
+
+                            controller.setAnchorView(
+                                preview
+                            )
+
+                            preview.setMediaController(
+                                controller
+                            )
+
+                            preview.setVideoURI(
+                                Uri.fromFile(
+                                    videoFile
+                                )
+                            )
+
+                            preview.setOnPreparedListener {
+                                it.isLooping = false
+                            }
+
+                            preview.start()
+
+                        } catch (
+                            e: Exception
+                        ) {
+
+                            Toast.makeText(
+                                this,
+                                "Video önizleme hatası:\n${e.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+
+                    Toast.makeText(
+                        this,
+                        "🎬 WAN 2.2 videosu hazır!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (
+                e: Exception
+            ) {
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "WAN video hatası:\n${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } finally {
+
+                connection?.disconnect()
+            }
+
+        }.start()
+    }
+
+    // =========================================================
+    // OLD PREPARE VIDEO
+    // =========================================================
 
     private fun prepareVideoOnServer(
         lyrics: String,
@@ -1214,7 +2524,9 @@ class MainActivity : Activity() {
             try {
 
                 val url =
-                    URL(videoServerUrl)
+                    URL(
+                        videoServerUrl
+                    )
 
                 connection =
                     url.openConnection()
@@ -1243,7 +2555,15 @@ class MainActivity : Activity() {
                 )
 
                 val json =
-                    """{"lyrics":"${jsonEscape(lyrics)}","style":"${jsonEscape(style)}","duration":$duration,"orientation":"${jsonEscape(orientation)}","visualDescription":"${jsonEscape(visualDescription)}"}"""
+                    """
+                    {
+                      "lyrics":"${jsonEscape(lyrics)}",
+                      "style":"${jsonEscape(style)}",
+                      "duration":$duration,
+                      "orientation":"${jsonEscape(orientation)}",
+                      "visualDescription":"${jsonEscape(visualDescription)}"
+                    }
+                    """.trimIndent()
 
                 connection.outputStream.use { output ->
 
@@ -1259,19 +2579,24 @@ class MainActivity : Activity() {
                 val responseCode =
                     connection.responseCode
 
-                if (responseCode !in 200..299) {
+                if (
+                    responseCode !in 200..299
+                ) {
 
                     val errorText =
                         try {
 
-                            connection.errorStream
+                            connection
+                                .errorStream
                                 ?.bufferedReader()
                                 ?.use {
                                     it.readText()
                                 }
                                 ?: "Render sunucu hatası"
 
-                        } catch (e: Exception) {
+                        } catch (
+                            _: Exception
+                        ) {
 
                             "Render sunucu hatası"
                         }
@@ -1294,40 +2619,45 @@ class MainActivity : Activity() {
                         "nova_generated_video.mp4"
                     )
 
-                connection.inputStream.use { input ->
+                connection
+                    .inputStream
+                    .use { input ->
 
-                    BufferedInputStream(
-                        input
-                    ).use { bufferedInput ->
+                        BufferedInputStream(
+                            input
+                        ).use {
+                            bufferedInput ->
 
-                        FileOutputStream(
-                            videoFile
-                        ).use { output ->
+                            FileOutputStream(
+                                videoFile
+                            ).use { output ->
 
-                            val buffer =
-                                ByteArray(16 * 1024)
+                                val buffer =
+                                    ByteArray(
+                                        16 * 1024
+                                    )
 
-                            var count: Int
+                                var count: Int
 
-                            while (
-                                bufferedInput
-                                    .read(buffer)
-                                    .also {
-                                        count = it
-                                    } != -1
-                            ) {
+                                while (
+                                    bufferedInput
+                                        .read(buffer)
+                                        .also {
+                                            count = it
+                                        } != -1
+                                ) {
 
-                                output.write(
-                                    buffer,
-                                    0,
-                                    count
-                                )
+                                    output.write(
+                                        buffer,
+                                        0,
+                                        count
+                                    )
+                                }
+
+                                output.flush()
                             }
-
-                            output.flush()
                         }
                     }
-                }
 
                 if (
                     !videoFile.exists() ||
@@ -1347,7 +2677,9 @@ class MainActivity : Activity() {
                     val preview =
                         videoPreview
 
-                    if (preview != null) {
+                    if (
+                        preview != null
+                    ) {
 
                         preview.setVideoURI(
                             Uri.fromFile(
@@ -1369,7 +2701,9 @@ class MainActivity : Activity() {
                     ).show()
                 }
 
-            } catch (e: Exception) {
+            } catch (
+                e: Exception
+            ) {
 
                 runOnUiThread {
 
@@ -1387,6 +2721,10 @@ class MainActivity : Activity() {
 
         }.start()
     }
+
+    // =========================================================
+    // SAVE VIDEO
+    // =========================================================
 
     private fun saveVideoToPhone() {
 
@@ -1448,45 +2786,55 @@ class MainActivity : Activity() {
                     values
                 )
 
-            if (uri == null) {
+            if (
+                uri == null
+            ) {
 
                 throw Exception(
                     "Telefon depolamasında video oluşturulamadı."
                 )
             }
 
-            resolver.openOutputStream(
-                uri
-            ).use { output ->
+            resolver
+                .openOutputStream(uri)
+                .use { output ->
 
-                if (output == null) {
-
-                    throw Exception(
-                        "Video yazma akışı açılamadı."
-                    )
-                }
-
-                sourceFile.inputStream().use { input ->
-
-                    val buffer =
-                        ByteArray(16 * 1024)
-
-                    var count: Int
-
-                    while (
-                        input.read(buffer).also {
-                            count = it
-                        } != -1
+                    if (
+                        output == null
                     ) {
 
-                        output.write(
-                            buffer,
-                            0,
-                            count
+                        throw Exception(
+                            "Video yazma akışı açılamadı."
                         )
                     }
+
+                    sourceFile
+                        .inputStream()
+                        .use { input ->
+
+                            val buffer =
+                                ByteArray(
+                                    16 * 1024
+                                )
+
+                            var count: Int
+
+                            while (
+                                input
+                                    .read(buffer)
+                                    .also {
+                                        count = it
+                                    } != -1
+                            ) {
+
+                                output.write(
+                                    buffer,
+                                    0,
+                                    count
+                                )
+                            }
+                        }
                 }
-            }
 
             if (
                 Build.VERSION.SDK_INT >=
@@ -1516,7 +2864,9 @@ class MainActivity : Activity() {
                 Toast.LENGTH_LONG
             ).show()
 
-        } catch (e: Exception) {
+        } catch (
+            e: Exception
+        ) {
 
             Toast.makeText(
                 this,
@@ -1525,6 +2875,10 @@ class MainActivity : Activity() {
             ).show()
         }
     }
+
+    // =========================================================
+    // JSON ESCAPE
+    // =========================================================
 
     private fun jsonEscape(
         text: String
@@ -1553,40 +2907,63 @@ class MainActivity : Activity() {
             )
     }
 
+    // =========================================================
+    // DP
+    // =========================================================
+
     private fun dp(
         value: Int
     ): Int {
 
         return (
             value *
-                resources.displayMetrics.density
+                resources
+                    .displayMetrics
+                    .density
             ).toInt()
     }
+
+    // =========================================================
+    // DESTROY
+    // =========================================================
 
     override fun onDestroy() {
 
         try {
             mediaPlayer?.release()
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
         }
 
-        mediaPlayer = null
+        mediaPlayer =
+            null
 
         try {
             lyricsWebView?.destroy()
-        } catch (_: Exception) {
+        } catch (
+            _: Exception
+        ) {
         }
 
-        lyricsWebView = null
+        lyricsWebView =
+            null
 
         super.onDestroy()
     }
 
+    // =========================================================
+    // BACK
+    // =========================================================
+
     override fun onBackPressed() {
 
-        if (videoRoot != null) {
+        if (
+            videoRoot != null
+        ) {
 
-            videoRoot = null
+            videoRoot =
+                null
 
             showMainScreen()
 
