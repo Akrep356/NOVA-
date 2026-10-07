@@ -30,7 +30,8 @@ app.get("/", (_req, res) => {
     endpoints: [
       "POST /generate",
       "POST /generate-lyrics",
-      "POST /prepare-video"
+      "POST /prepare-video",
+      "GET /wan-api-test"
     ]
   });
 });
@@ -46,6 +47,61 @@ app.get("/health", (_req, res) => {
     geminiKeyConfigured: Boolean(GEMINI_API_KEY),
     videoEngine: "Wikimedia Commons + FFmpeg"
   });
+});
+
+// =============================================================
+// HUGGING FACE WAN 2.2 API TEST
+// =============================================================
+//
+// Bu endpoint SADECE Hugging Face Wan Space API bilgisini
+// kontrol eder.
+//
+// Video üretmez.
+// ZeroGPU video süresi harcamaz.
+// Mevcut video sistemine dokunmaz.
+//
+// =============================================================
+
+app.get("/wan-api-test", async (_req, res) => {
+
+  try {
+
+    const response =
+      await fetch(
+        "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space/gradio_api/info"
+      );
+
+    const responseText =
+      await response.text();
+
+    console.log(
+      "WAN API TEST STATUS:",
+      response.status
+    );
+
+    console.log(
+      "WAN API TEST RESPONSE:",
+      responseText
+    );
+
+    res
+      .status(response.status)
+      .type("application/json")
+      .send(responseText);
+
+  } catch (error) {
+
+    console.error(
+      "WAN API TEST ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      ok: false,
+      error:
+        error.message
+    });
+  }
 });
 
 // =============================================================
@@ -972,7 +1028,6 @@ function buildVideoSearchQueries(
       )
       .trim();
 
-  // 1. Kullanıcının tam görsel isteği.
   if (visual) {
 
     queries.push(
@@ -984,14 +1039,12 @@ function buildVideoSearchQueries(
     );
   }
 
-  // 2. Stil.
   if (styleText) {
     queries.push(
       styleText
     );
   }
 
-  // 3. Genel stil alternatifleri.
   const fallbackMap = {
 
     "Sinematik": [
@@ -1079,7 +1132,6 @@ function buildVideoSearchQueries(
 
   }
 
-  // Aynı sorguları kaldır.
   return [
     ...new Set(
       queries
@@ -1095,22 +1147,6 @@ function buildVideoSearchQueries(
 
 // =============================================================
 // GERÇEK VİDEO ÜRETİMİ
-// =============================================================
-//
-// Pixabay kullanılmaz.
-// API anahtarı gerekmez.
-//
-// Wikimedia Commons:
-//   arama
-//      ↓
-//   ücretsiz video
-//      ↓
-//   indirme
-//      ↓
-//   FFmpeg
-//      ↓
-//   MP4
-//
 // =============================================================
 
 app.post(
@@ -1185,10 +1221,6 @@ app.post(
           )
         );
 
-      // ---------------------------------------------------------
-      // Stil anahtarları
-      // ---------------------------------------------------------
-
       const styleMap = {
 
         "Sinematik":
@@ -1219,10 +1251,6 @@ app.post(
       const styleKeyword =
         styleMap[style] ||
         "cinematic";
-
-      // ---------------------------------------------------------
-      // Birden fazla arama dene
-      // ---------------------------------------------------------
 
       const searchQueries =
         buildVideoSearchQueries(
@@ -1290,10 +1318,6 @@ app.post(
         });
       }
 
-      // ---------------------------------------------------------
-      // Aynı videoları tekrar etmeden önce en fazla 5 kaynak
-      // ---------------------------------------------------------
-
       videos =
         videos
           .filter(
@@ -1310,10 +1334,6 @@ app.post(
         "WIKIMEDIA VIDEOS SELECTED:",
         videos.length
       );
-
-      // ---------------------------------------------------------
-      // Videoları indir
-      // ---------------------------------------------------------
 
       const downloadedFiles = [];
 
@@ -1376,11 +1396,6 @@ app.post(
         }
 
       }
-
-      // ---------------------------------------------------------
-      // Eğer ilk sonuçların hiçbiri indirilemezse,
-      // daha genel aramalardan tekrar video bul.
-      // ---------------------------------------------------------
 
       if (
         downloadedFiles.length === 0
@@ -1505,22 +1520,6 @@ app.post(
         downloadedFiles.length
       );
 
-      // ---------------------------------------------------------
-      // Klipleri oluştur
-      // ---------------------------------------------------------
-      //
-      // 10-12 saniyelik parçalar kullanıyoruz.
-      // Süre yetmezse kaynak videoları tekrar kullanıyoruz.
-      //
-      // Böylece:
-      //
-      // 30 sn  -> yaklaşık 3 klip
-      // 60 sn  -> yaklaşık 6 klip
-      // 90 sn  -> yaklaşık 9 klip
-      // 180 sn -> yaklaşık 18 klip
-      //
-      // ---------------------------------------------------------
-
       const segmentFiles = [];
 
       const segmentDuration =
@@ -1596,8 +1595,6 @@ app.post(
 
           sourceIndex++;
 
-          // Aynı kaynak sürekli hata verirse
-          // döngünün sonsuza girmesini önle.
           if (
             sourceIndex >
             downloadedFiles.length * 3 &&
@@ -1632,10 +1629,6 @@ app.post(
         segmentFiles.length
       );
 
-      // ---------------------------------------------------------
-      // Birleştir
-      // ---------------------------------------------------------
-
       const combinedFile =
         path.join(
           workDir,
@@ -1646,10 +1639,6 @@ app.post(
         segmentFiles,
         combinedFile
       );
-
-      // ---------------------------------------------------------
-      // Nihai süreyi tam olarak ayarla
-      // ---------------------------------------------------------
 
       const finalFile =
         path.join(
@@ -1693,10 +1682,6 @@ app.post(
         }
       );
 
-      // ---------------------------------------------------------
-      // Sonucu kontrol et
-      // ---------------------------------------------------------
-
       if (
         !fs.existsSync(
           finalFile
@@ -1730,10 +1715,6 @@ app.post(
         "bytes"
       );
 
-      // ---------------------------------------------------------
-      // Kaynak bilgilerini logla
-      // ---------------------------------------------------------
-
       console.log(
         "VIDEO SOURCES:"
       );
@@ -1749,10 +1730,6 @@ app.post(
         );
 
       }
-
-      // ---------------------------------------------------------
-      // MP4'ü Android'e gönder
-      // ---------------------------------------------------------
 
       res.setHeader(
         "Content-Type",
@@ -1789,14 +1766,6 @@ app.post(
       });
 
     } finally {
-
-      // ---------------------------------------------------------
-      // Render geçici dosyaları temizle.
-      //
-      // 5 saniye yerine 120 saniye bekliyoruz.
-      // Büyük MP4 Android'e gönderilirken dosyanın erken
-      // silinmesini önlüyoruz.
-      // ---------------------------------------------------------
 
       setTimeout(
         () => {
