@@ -17,7 +17,1070 @@ const STABILITY_API_KEY = process.env.STABILITY_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+
+/*
+ * WAN 2.2 için Android'den gönderilecek Base64 fotoğraf
+ * 1 MB sınırına takılmasın diye 20 MB yapıldı.
+ */
+app.use(express.json({ limit: "20mb" }));
+
+// =============================================================
+// HUGGING FACE WAN 2.2
+// =============================================================
+
+const HF_WAN_SPACE =
+  "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space";
+
+const HF_TOKEN =
+  process.env.HF_TOKEN || "";
+
+function getHFHeaders(extraHeaders = {}) {
+
+  const headers = {
+    ...extraHeaders
+  };
+
+  if (HF_TOKEN) {
+
+    headers["Authorization"] =
+      `Bearer ${HF_TOKEN}`;
+
+  }
+
+  return headers;
+}
+
+// =============================================================
+// HUGGING FACE WAN DOSYA YÜKLEME
+// =============================================================
+
+async function uploadImageToWan(
+  imageBuffer,
+  filename,
+  mimeType
+) {
+
+  const form =
+    new FormData();
+
+  const blob =
+    new Blob(
+      [
+        imageBuffer
+      ],
+      {
+        type:
+          mimeType ||
+          "image/jpeg"
+      }
+    );
+
+  form.append(
+    "files",
+    blob,
+    filename || "nova-image.jpg"
+  );
+
+  const response =
+    await fetch(
+      `${HF_WAN_SPACE}/gradio_api/upload`,
+      {
+        method:
+          "POST",
+
+        headers:
+          getHFHeaders(),
+
+        body:
+          form
+      }
+    );
+
+  const responseText =
+    await response.text();
+
+  console.log(
+    "WAN UPLOAD STATUS:",
+    response.status
+  );
+
+  console.log(
+    "WAN UPLOAD RESPONSE:",
+    responseText
+  );
+
+  if (!response.ok) {
+
+    throw new Error(
+      `WAN image upload failed: ${response.status} ${responseText}`
+    );
+  }
+
+  let data;
+
+  try {
+
+    data =
+      JSON.parse(
+        responseText
+      );
+
+  } catch (error) {
+
+    throw new Error(
+      "WAN upload returned invalid JSON."
+    );
+  }
+
+  /*
+   * Gradio çoğunlukla:
+   *
+   * [
+   *   "/tmp/gradio/....jpg"
+   * ]
+   *
+   * şeklinde döndürür.
+   */
+
+  let uploadedPath = "";
+
+  if (
+    Array.isArray(data) &&
+    data.length > 0
+  ) {
+
+    if (
+      typeof data[0] === "string"
+    ) {
+
+      uploadedPath =
+        data[0];
+
+    } else if (
+      data[0]?.path
+    ) {
+
+      uploadedPath =
+        data[0].path;
+
+    }
+
+  } else if (
+    typeof data === "string"
+  ) {
+
+    uploadedPath =
+      data;
+
+  } else if (
+    data?.path
+  ) {
+
+    uploadedPath =
+      data.path;
+
+  }
+
+  if (!uploadedPath) {
+
+    throw new Error(
+      "WAN upload did not return a file path."
+    );
+  }
+
+  return uploadedPath;
+}
+
+// =============================================================
+// WAN SONUÇ BEKLEME
+// =============================================================
+
+async function waitForWanResult(
+  eventId
+) {
+
+  const url =
+    `${HF_WAN_SPACE}/gradio_api/call/generate_video/${eventId}`;
+
+  console.log(
+    "WAN RESULT URL:",
+    url
+  );
+
+  const response =
+    await fetch(
+      url,
+      {
+        method:
+          "GET",
+
+        headers:
+          getHFHeaders({
+            "Accept":
+              "text/event-stream"
+          })
+      }
+    );
+
+  const responseText =
+    await response.text();
+
+  console.log(
+    "WAN RESULT STATUS:",
+    response.status
+  );
+
+  if (!response.ok) {
+
+    throw new Error(
+      `WAN result request failed: ${response.status} ${responseText}`
+    );
+  }
+
+  /*
+   * Gradio SSE cevabını bloklara ayırıyoruz.
+   *
+   * Örnek:
+   *
+   * event: generating
+   * data: ...
+   *
+   * event: complete
+   * data: [...]
+   */
+
+  const blocks =
+    responseText
+      .split(/\n\n+/)
+      .map(
+        block =>
+          block.trim()
+      )
+      .filter(Boolean);
+
+  let lastData =
+    null;
+
+  for (
+    const block of blocks
+  ) {
+
+    const eventMatch =
+      block.match(
+        /(?:^|\n)event:\s*([^\n]+)/i
+      );
+
+    const dataMatch =
+      block.match(
+        /(?:^|\n)data:\s*([\s\S]*)/i
+      );
+
+    const eventName =
+      eventMatch
+        ? eventMatch[1].trim()
+        : "";
+
+    const dataText =
+      dataMatch
+        ? dataMatch[1].trim()
+        : "";
+
+    if (!dataText) {
+      continue;
+    }
+
+    let parsedData;
+
+    try {
+
+      parsedData =
+        JSON.parse(
+          dataText
+        );
+
+    } catch (_) {
+
+      parsedData =
+        dataText;
+
+    }
+
+    lastData =
+      parsedData;
+
+    console.log(
+      "WAN EVENT:",
+      eventName
+    );
+
+    if (
+      eventName === "error"
+    ) {
+
+      throw new Error(
+        typeof parsedData === "string"
+          ? parsedData
+          : JSON.stringify(parsedData)
+      );
+    }
+
+    if (
+      eventName === "complete"
+    ) {
+
+      return parsedData;
+    }
+  }
+
+  /*
+   * Bazı Gradio sürümlerinde event ismi
+   * farklı gelebilir. Son veri video
+   * dosyasına benziyorsa onu da döndürüyoruz.
+   */
+
+  if (lastData !== null) {
+
+    return lastData;
+
+  }
+
+  throw new Error(
+    "WAN video generation returned no result."
+  );
+}
+
+// =============================================================
+// WAN SONUÇ İÇİNDEN VİDEO DOSYASINI BUL
+// =============================================================
+
+function findWanVideoFile(
+  result
+) {
+
+  const found = [];
+
+  function walk(
+    value
+  ) {
+
+    if (
+      value === null ||
+      value === undefined
+    ) {
+      return;
+    }
+
+    if (
+      typeof value === "string"
+    ) {
+
+      found.push(
+        {
+          value:
+            value
+        }
+      );
+
+      return;
+    }
+
+    if (
+      Array.isArray(value)
+    ) {
+
+      for (
+        const item of value
+      ) {
+
+        walk(
+          item
+        );
+
+      }
+
+      return;
+    }
+
+    if (
+      typeof value === "object"
+    ) {
+
+      /*
+       * Önce doğrudan FileData
+       */
+
+      if (
+        typeof value.url === "string"
+      ) {
+
+        found.push(
+          {
+            value:
+              value.url,
+
+            type:
+              "url"
+          }
+        );
+
+      }
+
+      if (
+        typeof value.path === "string"
+      ) {
+
+        found.push(
+          {
+            value:
+              value.path,
+
+            type:
+              "path"
+          }
+        );
+
+      }
+
+      if (
+        typeof value.name === "string"
+      ) {
+
+        found.push(
+          {
+            value:
+              value.name,
+
+            type:
+              "name"
+          }
+        );
+
+      }
+
+      for (
+        const key of Object.keys(value)
+      ) {
+
+        walk(
+          value[key]
+        );
+
+      }
+    }
+  }
+
+  walk(
+    result
+  );
+
+  /*
+   * MP4 / WebM sonuçlarını önceliklendir.
+   */
+
+  const videoItem =
+    found.find(
+      item =>
+        /\.(mp4|webm|mov|m4v)(\?|$)/i.test(
+          String(
+            item.value
+          )
+        )
+    );
+
+  if (
+    videoItem
+  ) {
+
+    if (
+      videoItem.type === "url"
+    ) {
+
+      return videoItem.value;
+
+    }
+
+    return buildWanFileUrl(
+      videoItem.value
+    );
+  }
+
+  /*
+   * URL olarak gelen herhangi bir
+   * video dosyasını kontrol et.
+   */
+
+  const urlItem =
+    found.find(
+      item =>
+        item.type === "url"
+    );
+
+  if (
+    urlItem
+  ) {
+
+    return urlItem.value;
+
+  }
+
+  /*
+   * Path olarak gelen sonucu kullan.
+   */
+
+  const pathItem =
+    found.find(
+      item =>
+        item.type === "path"
+    );
+
+  if (
+    pathItem
+  ) {
+
+    return buildWanFileUrl(
+      pathItem.value
+    );
+
+  }
+
+  return null;
+}
+
+// =============================================================
+// WAN DOSYA URL OLUŞTURMA
+// =============================================================
+
+function buildWanFileUrl(
+  filePath
+) {
+
+  if (
+    !filePath
+  ) {
+
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(
+      filePath
+    )
+  ) {
+
+    return filePath;
+  }
+
+  return (
+    `${HF_WAN_SPACE}/gradio_api/file=` +
+    encodeURIComponent(
+      filePath
+    )
+  );
+}
+
+// =============================================================
+// WAN VİDEO İNDİRME
+// =============================================================
+
+async function downloadWanVideo(
+  videoUrl
+) {
+
+  console.log(
+    "WAN VIDEO DOWNLOAD URL:",
+    videoUrl
+  );
+
+  const response =
+    await fetch(
+      videoUrl,
+      {
+        method:
+          "GET",
+
+        headers:
+          getHFHeaders()
+      }
+    );
+
+  if (!response.ok) {
+
+    const errorText =
+      await response.text();
+
+    throw new Error(
+      `WAN video download failed: ${response.status} ${errorText}`
+    );
+  }
+
+  if (
+    !response.body
+  ) {
+
+    throw new Error(
+      "WAN video response has no body."
+    );
+  }
+
+  const buffer =
+    Buffer.from(
+      await response.arrayBuffer()
+    );
+
+  if (
+    buffer.length <= 0
+  ) {
+
+    throw new Error(
+      "WAN video is empty."
+    );
+  }
+
+  return buffer;
+}
+
+// =============================================================
+// WAN 2.2 VİDEO ÜRET
+// =============================================================
+//
+// Android:
+//
+// POST /wan-video
+//
+// JSON:
+//
+// {
+//   "imageBase64": "...",
+//   "imageMimeType": "image/jpeg",
+//   "prompt": "bu görüntüyü sinematik şekilde canlandır",
+//   "duration": 3.5
+// }
+//
+// =============================================================
+
+app.post(
+  "/wan-video",
+  async (req, res) => {
+
+    try {
+
+      const imageBase64 =
+        typeof req.body?.imageBase64 === "string"
+          ? req.body.imageBase64
+          : "";
+
+      const imageMimeType =
+        typeof req.body?.imageMimeType === "string"
+          ? req.body.imageMimeType
+          : "image/jpeg";
+
+      const prompt =
+        typeof req.body?.prompt === "string"
+          ? req.body.prompt.trim()
+          : "bu görüntüyü sinematik şekilde canlandır";
+
+      const requestedDuration =
+        Number(
+          req.body?.duration ?? 3.5
+        );
+
+      if (
+        !imageBase64
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "imageBase64 is required."
+        });
+      }
+
+      /*
+       * Base64 başında data:image/jpeg;base64,...
+       * varsa temizle.
+       */
+
+      const cleanBase64 =
+        imageBase64.replace(
+          /^data:[^;]+;base64,/i,
+          ""
+        );
+
+      let imageBuffer;
+
+      try {
+
+        imageBuffer =
+          Buffer.from(
+            cleanBase64,
+            "base64"
+          );
+
+      } catch (decodeError) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Invalid imageBase64."
+        });
+      }
+
+      if (
+        !imageBuffer ||
+        imageBuffer.length <= 0
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Image data is empty."
+        });
+      }
+
+      /*
+       * Güvenlik için 15 MB üstünü reddediyoruz.
+       */
+
+      const MAX_IMAGE_SIZE =
+        15 * 1024 * 1024;
+
+      if (
+        imageBuffer.length >
+        MAX_IMAGE_SIZE
+      ) {
+
+        return res.status(413).json({
+          ok: false,
+          error:
+            "Image is too large. Maximum size is 15 MB."
+        });
+      }
+
+      /*
+       * Wan Space 0.5 - 5 saniye destekliyor.
+       */
+
+      const duration =
+        Math.max(
+          0.5,
+          Math.min(
+            5,
+            requestedDuration
+          )
+        );
+
+      console.log(
+        "================================================="
+      );
+
+      console.log(
+        "WAN 2.2 VIDEO REQUEST"
+      );
+
+      console.log(
+        "Image size:",
+        imageBuffer.length,
+        "bytes"
+      );
+
+      console.log(
+        "Image MIME:",
+        imageMimeType
+      );
+
+      console.log(
+        "Prompt:",
+        prompt
+      );
+
+      console.log(
+        "Duration:",
+        duration
+      );
+
+      console.log(
+        "================================================="
+      );
+
+      // ---------------------------------------------------------
+      // 1. RESMİ WAN SPACE'E YÜKLE
+      // ---------------------------------------------------------
+
+      const filename =
+        imageMimeType.includes("png")
+          ? "nova-input.png"
+          : "nova-input.jpg";
+
+      const uploadedPath =
+        await uploadImageToWan(
+          imageBuffer,
+          filename,
+          imageMimeType
+        );
+
+      console.log(
+        "WAN UPLOADED PATH:",
+        uploadedPath
+      );
+
+      // ---------------------------------------------------------
+      // 2. GRADIO FILEDATA
+      // ---------------------------------------------------------
+
+      const imageFileData = {
+
+        path:
+          uploadedPath,
+
+        meta: {
+          _type:
+            "gradio.FileData"
+        }
+      };
+
+      // ---------------------------------------------------------
+      // 3. WAN GENERATE_VIDEO
+      // ---------------------------------------------------------
+
+      const wanData = [
+
+        imageFileData,
+
+        prompt,
+
+        duration,
+
+        "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
+
+        6,
+
+        5,
+
+        5,
+
+        42,
+
+        true
+
+      ];
+
+      console.log(
+        "WAN CALL DATA PREPARED."
+      );
+
+      const generateResponse =
+        await fetch(
+          `${HF_WAN_SPACE}/gradio_api/call/generate_video`,
+          {
+            method:
+              "POST",
+
+            headers:
+              getHFHeaders({
+                "Content-Type":
+                  "application/json"
+              }),
+
+            body:
+              JSON.stringify({
+                data:
+                  wanData
+              })
+          }
+        );
+
+      const generateText =
+        await generateResponse.text();
+
+      console.log(
+        "WAN GENERATE STATUS:",
+        generateResponse.status
+      );
+
+      console.log(
+        "WAN GENERATE RESPONSE:",
+        generateText
+      );
+
+      if (
+        !generateResponse.ok
+      ) {
+
+        return res.status(502).json({
+          ok: false,
+
+          error:
+            "WAN video generation request failed.",
+
+          details:
+            generateText
+        });
+      }
+
+      let generateData;
+
+      try {
+
+        generateData =
+          JSON.parse(
+            generateText
+          );
+
+      } catch (_) {
+
+        return res.status(502).json({
+          ok: false,
+
+          error:
+            "WAN returned invalid generation response.",
+
+          details:
+            generateText
+        });
+      }
+
+      const eventId =
+        generateData?.event_id;
+
+      if (
+        !eventId
+      ) {
+
+        return res.status(502).json({
+          ok: false,
+
+          error:
+            "WAN did not return an event_id.",
+
+          details:
+            generateData
+        });
+      }
+
+      console.log(
+        "WAN EVENT ID:",
+        eventId
+      );
+
+      // ---------------------------------------------------------
+      // 4. VİDEONUN OLUŞMASINI BEKLE
+      // ---------------------------------------------------------
+
+      const result =
+        await waitForWanResult(
+          eventId
+        );
+
+      console.log(
+        "WAN COMPLETE RESULT:"
+      );
+
+      console.log(
+        JSON.stringify(
+          result,
+          null,
+          2
+        )
+      );
+
+      // ---------------------------------------------------------
+      // 5. VİDEO DOSYASINI BUL
+      // ---------------------------------------------------------
+
+      const videoUrl =
+        findWanVideoFile(
+          result
+        );
+
+      if (
+        !videoUrl
+      ) {
+
+        return res.status(502).json({
+          ok: false,
+
+          error:
+            "WAN completed but video file was not found.",
+
+          result:
+            result
+        });
+      }
+
+      console.log(
+        "WAN VIDEO URL:",
+        videoUrl
+      );
+
+      // ---------------------------------------------------------
+      // 6. MP4'Ü İNDİR
+      // ---------------------------------------------------------
+
+      const videoBuffer =
+        await downloadWanVideo(
+          videoUrl
+        );
+
+      console.log(
+        "WAN VIDEO SIZE:",
+        videoBuffer.length,
+        "bytes"
+      );
+
+      // ---------------------------------------------------------
+      // 7. ANDROID'A MP4 OLARAK GÖNDER
+      // ---------------------------------------------------------
+
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        'inline; filename="nova-wan-video.mp4"'
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      return res.send(
+        videoBuffer
+      );
+
+    } catch (error) {
+
+      console.error(
+        "================================================="
+      );
+
+      console.error(
+        "WAN VIDEO ERROR:"
+      );
+
+      console.error(
+        error
+      );
+
+      console.error(
+        "================================================="
+      );
+
+      return res.status(500).json({
+        ok: false,
+
+        error:
+          "NOVA WAN video generation server error.",
+
+        details:
+          error?.message ||
+          String(error)
+      });
+    }
+  }
+);
 
 // =============================================================
 // ANA SAYFA
@@ -31,7 +1094,8 @@ app.get("/", (_req, res) => {
       "POST /generate",
       "POST /generate-lyrics",
       "POST /prepare-video",
-      "GET /wan-api-test"
+      "GET /wan-api-test",
+      "POST /wan-video"
     ]
   });
 });
@@ -43,9 +1107,16 @@ app.get("/", (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    stabilityKeyConfigured: Boolean(STABILITY_API_KEY),
-    geminiKeyConfigured: Boolean(GEMINI_API_KEY),
-    videoEngine: "Wikimedia Commons + FFmpeg"
+    stabilityKeyConfigured:
+      Boolean(STABILITY_API_KEY),
+    geminiKeyConfigured:
+      Boolean(GEMINI_API_KEY),
+    hfTokenConfigured:
+      Boolean(HF_TOKEN),
+    videoEngine:
+      "Wikimedia Commons + FFmpeg",
+    wanEngine:
+      "Hugging Face Wan 2.2 I2V"
   });
 });
 
@@ -68,7 +1139,7 @@ app.get("/wan-api-test", async (_req, res) => {
 
     const response =
       await fetch(
-        "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space/gradio_api/info"
+        `${HF_WAN_SPACE}/gradio_api/info`
       );
 
     const responseText =
@@ -385,1433 +1456,4 @@ Sadece bu şarkı sözünü döndür.
 
               generationConfig: {
                 maxOutputTokens: 3000
-              }
-            })
-          }
-        );
-
-      const responseText =
-        await response.text();
-
-      if (!response.ok) {
-
-        console.error(
-          "Gemini API error:",
-          responseText
-        );
-
-        return res.status(
-          response.status
-        ).json({
-          error:
-            "Gemini lyrics generation failed.",
-
-          details:
-            responseText
-        });
-      }
-
-      let data;
-
-      try {
-
-        data =
-          JSON.parse(
-            responseText
-          );
-
-      } catch (parseError) {
-
-        console.error(
-          "Gemini JSON parse error:",
-          parseError
-        );
-
-        return res.status(500).json({
-          error:
-            "Invalid response received from Gemini."
-        });
-      }
-
-      const lyrics =
-        data?.candidates?.[0]
-          ?.content?.parts
-          ?.map(part =>
-            typeof part?.text === "string"
-              ? part.text
-              : ""
-          )
-          .join("")
-          .trim();
-
-      if (!lyrics) {
-
-        return res.status(500).json({
-          error:
-            "Gemini did not return lyrics."
-        });
-      }
-
-      return res.json({
-        ok: true,
-        lyrics: lyrics
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Lyrics generation error:",
-        error
-      );
-
-      return res.status(500).json({
-        error:
-          "NOVA lyrics generation server error."
-      });
-    }
-  }
-);
-
-// =============================================================
-// WIKIMEDIA COMMONS VİDEO ARAMA
-// =============================================================
-
-async function searchWikimediaVideos(
-  searchText
-) {
-
-  const cleanText =
-    String(searchText || "")
-      .replace(
-        /[^\p{L}\p{N}\s]/gu,
-        " "
-      )
-      .replace(
-        /\s+/g,
-        " "
-      )
-      .trim()
-      .slice(0, 180);
-
-  const queryText =
-    `${cleanText} filetype:video`
-      .trim();
-
-  console.log(
-    "WIKIMEDIA SEARCH QUERY:",
-    queryText
-  );
-
-  const url =
-    new URL(
-      "https://commons.wikimedia.org/w/api.php"
-    );
-
-  url.searchParams.set(
-    "action",
-    "query"
-  );
-
-  url.searchParams.set(
-    "format",
-    "json"
-  );
-
-  url.searchParams.set(
-    "formatversion",
-    "2"
-  );
-
-  url.searchParams.set(
-    "generator",
-    "search"
-  );
-
-  url.searchParams.set(
-    "gsrsearch",
-    queryText
-  );
-
-  url.searchParams.set(
-    "gsrnamespace",
-    "6"
-  );
-
-  url.searchParams.set(
-    "gsrlimit",
-    "50"
-  );
-
-  url.searchParams.set(
-    "prop",
-    "imageinfo"
-  );
-
-  url.searchParams.set(
-    "iiprop",
-    "url|mime|size|mediatype|extmetadata"
-  );
-
-  url.searchParams.set(
-    "origin",
-    "*"
-  );
-
-  const response =
-    await fetch(
-      url,
-      {
-        headers: {
-          "User-Agent":
-            "NOVA-App/1.0 (video generator)"
-        }
-      }
-    );
-
-  if (!response.ok) {
-
-    throw new Error(
-      `Wikimedia API error: ${response.status}`
-    );
-  }
-
-  const data =
-    await response.json();
-
-  const pages =
-    Array.isArray(
-      data?.query?.pages
-    )
-      ? data.query.pages
-      : [];
-
-  const MAX_DOWNLOAD_SIZE =
-    80 * 1024 * 1024;
-
-  const videos =
-    pages
-      .map(page => {
-
-        const info =
-          page?.imageinfo?.[0];
-
-        if (!info) {
-          return null;
-        }
-
-        const mime =
-          typeof info.mime === "string"
-            ? info.mime.toLowerCase()
-            : "";
-
-        const mediaType =
-          typeof info.mediatype === "string"
-            ? info.mediatype.toLowerCase()
-            : "";
-
-        const fileUrl =
-          typeof info.url === "string"
-            ? info.url
-            : "";
-
-        const title =
-          typeof page.title === "string"
-            ? page.title
-            : "Wikimedia video";
-
-        const size =
-          Number(
-            info.size || 0
-          );
-
-        const isVideo =
-          mime.startsWith("video/") ||
-          mediaType === "video" ||
-          mediaType === "multimedia" ||
-          /\.(mp4|webm|ogv|ogg|mov|m4v)(\?|$)/i.test(
-            fileUrl
-          );
-
-        if (!isVideo) {
-          return null;
-        }
-
-        if (!fileUrl) {
-          return null;
-        }
-
-        if (
-          size > MAX_DOWNLOAD_SIZE
-        ) {
-          console.log(
-            "SKIPPING LARGE VIDEO:",
-            title,
-            size
-          );
-
-          return null;
-        }
-
-        return {
-          title:
-            title,
-
-          url:
-            fileUrl,
-
-          mime:
-            mime,
-
-          size:
-            size,
-
-          descriptionUrl:
-            typeof info.descriptionurl === "string"
-              ? info.descriptionurl
-              : "",
-
-          metadata:
-            info.extmetadata || {}
-        };
-
-      })
-      .filter(Boolean);
-
-  return videos;
-}
-
-// =============================================================
-// VİDEO UZANTISI
-// =============================================================
-
-function getVideoExtension(
-  video
-) {
-
-  const mime =
-    String(
-      video?.mime || ""
-    ).toLowerCase();
-
-  const fileUrl =
-    String(
-      video?.url || ""
-    );
-
-  if (
-    mime.includes("webm") ||
-    /\.webm(\?|$)/i.test(fileUrl)
-  ) {
-    return "webm";
-  }
-
-  if (
-    mime.includes("ogg") ||
-    /\.ogv(\?|$)/i.test(fileUrl) ||
-    /\.ogg(\?|$)/i.test(fileUrl)
-  ) {
-    return "ogv";
-  }
-
-  if (
-    mime.includes("quicktime") ||
-    /\.mov(\?|$)/i.test(fileUrl)
-  ) {
-    return "mov";
-  }
-
-  if (
-    mime.includes("mp4") ||
-    /\.mp4(\?|$)/i.test(fileUrl) ||
-    /\.m4v(\?|$)/i.test(fileUrl)
-  ) {
-    return "mp4";
-  }
-
-  return "mp4";
-}
-
-// =============================================================
-// WİKİMEDİA VİDEO İNDİRME
-// =============================================================
-
-async function downloadVideo(
-  videoUrl,
-  destination
-) {
-
-  const response =
-    await fetch(
-      videoUrl,
-      {
-        headers: {
-          "User-Agent":
-            "NOVA-App/1.0 (video generator)"
-        }
-      }
-    );
-
-  if (!response.ok) {
-
-    throw new Error(
-      `Video download failed: ${response.status}`
-    );
-  }
-
-  if (!response.body) {
-
-    throw new Error(
-      "Video download returned empty body."
-    );
-  }
-
-  const contentLength =
-    Number(
-      response.headers.get(
-        "content-length"
-      ) || 0
-    );
-
-  const MAX_DOWNLOAD_SIZE =
-    80 * 1024 * 1024;
-
-  if (
-    contentLength > MAX_DOWNLOAD_SIZE
-  ) {
-
-    throw new Error(
-      "Video file is too large."
-    );
-  }
-
-  await pipeline(
-    Readable.fromWeb(
-      response.body
-    ),
-    fs.createWriteStream(
-      destination
-    )
-  );
-
-  const stats =
-    fs.statSync(
-      destination
-    );
-
-  if (
-    stats.size <= 0 ||
-    stats.size > MAX_DOWNLOAD_SIZE
-  ) {
-
-    throw new Error(
-      "Downloaded video size is invalid."
-    );
-  }
-}
-
-// =============================================================
-// VİDEO ORANI
-// =============================================================
-
-function getVideoScaleFilter(
-  orientation
-) {
-
-  if (
-    orientation === "9:16"
-  ) {
-
-    return [
-      "scale=480:854:force_original_aspect_ratio=increase",
-      "crop=480:854",
-      "setsar=1"
-    ].join(",");
-  }
-
-  if (
-    orientation === "16:9"
-  ) {
-
-    return [
-      "scale=854:480:force_original_aspect_ratio=increase",
-      "crop=854:480",
-      "setsar=1"
-    ].join(",");
-  }
-
-  return [
-    "scale=720:720:force_original_aspect_ratio=increase",
-    "crop=720:720",
-    "setsar=1"
-  ].join(",");
-}
-
-// =============================================================
-// TEK KLİPTEN VİDEO PARÇASI
-// =============================================================
-
-async function createVideoSegment(
-  inputFile,
-  outputFile,
-  duration,
-  orientation
-) {
-
-  const filter =
-    getVideoScaleFilter(
-      orientation
-    );
-
-  await execFileAsync(
-    "ffmpeg",
-    [
-      "-y",
-
-      "-stream_loop",
-      "-1",
-
-      "-i",
-      inputFile,
-
-      "-t",
-      String(duration),
-
-      "-vf",
-      filter,
-
-      "-an",
-
-      "-r",
-      "24",
-
-      "-c:v",
-      "libx264",
-
-      "-preset",
-      "veryfast",
-
-      "-crf",
-      "28",
-
-      "-pix_fmt",
-      "yuv420p",
-
-      "-movflags",
-      "+faststart",
-
-      outputFile
-    ],
-    {
-      maxBuffer:
-        10 * 1024 * 1024
-    }
-  );
-}
-
-// =============================================================
-// VİDEO BİRLEŞTİRME
-// =============================================================
-
-async function concatVideos(
-  files,
-  outputFile
-) {
-
-  const listFile =
-    path.join(
-      path.dirname(outputFile),
-      "concat.txt"
-    );
-
-  const content =
-    files
-      .map(file => {
-
-        const escaped =
-          file
-            .replace(
-              /'/g,
-              "'\\''"
-            );
-
-        return `file '${escaped}'`;
-
-      })
-      .join("\n");
-
-  fs.writeFileSync(
-    listFile,
-    content,
-    "utf8"
-  );
-
-  try {
-
-    await execFileAsync(
-      "ffmpeg",
-      [
-        "-y",
-
-        "-f",
-        "concat",
-
-        "-safe",
-        "0",
-
-        "-i",
-        listFile,
-
-        "-c",
-        "copy",
-
-        "-movflags",
-        "+faststart",
-
-        outputFile
-      ],
-      {
-        maxBuffer:
-          10 * 1024 * 1024
-      }
-    );
-
-  } finally {
-
-    try {
-
-      fs.unlinkSync(
-        listFile
-      );
-
-    } catch (_) {}
-
-  }
-}
-
-// =============================================================
-// VİDEO ARAMA SIRASI
-// =============================================================
-
-function buildVideoSearchQueries(
-  style,
-  styleKeyword,
-  visualDescription
-) {
-
-  const queries = [];
-
-  const visual =
-    String(
-      visualDescription || ""
-    )
-      .replace(
-        /[^\p{L}\p{N}\s]/gu,
-        " "
-      )
-      .replace(
-        /\s+/g,
-        " "
-      )
-      .trim();
-
-  const styleText =
-    String(
-      styleKeyword || "cinematic"
-    )
-      .replace(
-        /[^\p{L}\p{N}\s]/gu,
-        " "
-      )
-      .replace(
-        /\s+/g,
-        " "
-      )
-      .trim();
-
-  if (visual) {
-
-    queries.push(
-      `${visual} ${styleText}`
-    );
-
-    queries.push(
-      visual
-    );
-  }
-
-  if (styleText) {
-    queries.push(
-      styleText
-    );
-  }
-
-  const fallbackMap = {
-
-    "Sinematik": [
-      "cinematic",
-      "city",
-      "landscape",
-      "nature",
-      "film"
-    ],
-
-    "Duygusal": [
-      "emotional",
-      "sunset",
-      "rain",
-      "nature",
-      "people"
-    ],
-
-    "Enerjik": [
-      "concert",
-      "music",
-      "dance",
-      "festival",
-      "crowd"
-    ],
-
-    "Romantik": [
-      "romantic",
-      "couple",
-      "sunset",
-      "love",
-      "city"
-    ],
-
-    "Karanlık": [
-      "dark",
-      "night",
-      "rain",
-      "city",
-      "storm"
-    ],
-
-    "Neon": [
-      "neon",
-      "night city",
-      "city",
-      "lights",
-      "night"
-    ],
-
-    "Doğa": [
-      "nature",
-      "landscape",
-      "forest",
-      "mountain",
-      "ocean"
-    ],
-
-    "Konser": [
-      "concert",
-      "live music",
-      "music festival",
-      "stage",
-      "crowd"
-    ]
-  };
-
-  const fallbackQueries =
-    fallbackMap[style] ||
-    [
-      "cinematic",
-      "nature",
-      "city",
-      "landscape",
-      "concert"
-    ];
-
-  for (
-    const query of fallbackQueries
-  ) {
-
-    queries.push(
-      query
-    );
-
-  }
-
-  return [
-    ...new Set(
-      queries
-        .map(
-          item =>
-            String(item)
-              .trim()
-        )
-        .filter(Boolean)
-    )
-  ];
-}
-
-// =============================================================
-// GERÇEK VİDEO ÜRETİMİ
-// =============================================================
-
-app.post(
-  "/prepare-video",
-  async (req, res) => {
-
-    const workDir =
-      fs.mkdtempSync(
-        path.join(
-          os.tmpdir(),
-          "nova-video-"
-        )
-      );
-
-    try {
-
-      const lyrics =
-        typeof req.body?.lyrics === "string"
-          ? req.body.lyrics.trim()
-          : "";
-
-      const style =
-        typeof req.body?.style === "string"
-          ? req.body.style.trim()
-          : "Sinematik";
-
-      const requestedDuration =
-        Number(
-          req.body?.duration ?? 30
-        );
-
-      const orientation =
-        typeof req.body?.orientation === "string"
-          ? req.body.orientation.trim()
-          : "9:16";
-
-      const visualDescription =
-        typeof req.body?.visualDescription === "string"
-          ? req.body.visualDescription.trim()
-          : "";
-
-      if (!lyrics) {
-
-        return res.status(400).json({
-          error:
-            "lyrics is required."
-        });
-      }
-
-      if (
-        ![
-          "9:16",
-          "16:9",
-          "1:1"
-        ].includes(
-          orientation
-        )
-      ) {
-
-        return res.status(400).json({
-          error:
-            "Invalid video orientation."
-        });
-      }
-
-      const safeDuration =
-        Math.max(
-          1,
-          Math.min(
-            180,
-            requestedDuration
-          )
-        );
-
-      const styleMap = {
-
-        "Sinematik":
-          "cinematic",
-
-        "Duygusal":
-          "emotional",
-
-        "Enerjik":
-          "concert music",
-
-        "Romantik":
-          "romantic",
-
-        "Karanlık":
-          "dark night",
-
-        "Neon":
-          "neon city",
-
-        "Doğa":
-          "nature landscape",
-
-        "Konser":
-          "concert performance"
-      };
-
-      const styleKeyword =
-        styleMap[style] ||
-        "cinematic";
-
-      const searchQueries =
-        buildVideoSearchQueries(
-          style,
-          styleKeyword,
-          visualDescription
-        );
-
-      console.log(
-        "WIKIMEDIA SEARCH PLAN:",
-        searchQueries
-      );
-
-      let videos = [];
-
-      for (
-        const query of searchQueries
-      ) {
-
-        try {
-
-          console.log(
-            "TRYING VIDEO SEARCH:",
-            query
-          );
-
-          const results =
-            await searchWikimediaVideos(
-              query
-            );
-
-          console.log(
-            "SEARCH RESULT COUNT:",
-            results.length
-          );
-
-          if (
-            results.length > 0
-          ) {
-
-            videos =
-              results;
-
-            break;
-          }
-
-        } catch (searchError) {
-
-          console.error(
-            "WIKIMEDIA SEARCH ERROR:",
-            searchError.message
-          );
-
-        }
-
-      }
-
-      if (
-        videos.length === 0
-      ) {
-
-        return res.status(404).json({
-          error:
-            "Uygun ücretsiz video bulunamadı. Wikimedia Commons üzerinde uygun video bulunamadı."
-        });
-      }
-
-      videos =
-        videos
-          .filter(
-            video =>
-              video &&
-              video.url
-          )
-          .slice(
-            0,
-            5
-          );
-
-      console.log(
-        "WIKIMEDIA VIDEOS SELECTED:",
-        videos.length
-      );
-
-      const downloadedFiles = [];
-
-      for (
-        let i = 0;
-        i < videos.length;
-        i++
-      ) {
-
-        const video =
-          videos[i];
-
-        const extension =
-          getVideoExtension(
-            video
-          );
-
-        const destination =
-          path.join(
-            workDir,
-            `source-${i}.${extension}`
-          );
-
-        try {
-
-          console.log(
-            "DOWNLOADING VIDEO:",
-            video.title
-          );
-
-          await downloadVideo(
-            video.url,
-            destination
-          );
-
-          downloadedFiles.push({
-            file:
-              destination,
-
-            source:
-              video
-          });
-
-        } catch (downloadError) {
-
-          console.error(
-            "VIDEO DOWNLOAD ERROR:",
-            video.title,
-            downloadError.message
-          );
-
-          try {
-
-            fs.unlinkSync(
-              destination
-            );
-
-          } catch (_) {}
-
-        }
-
-      }
-
-      if (
-        downloadedFiles.length === 0
-      ) {
-
-        console.log(
-          "FIRST VIDEO DOWNLOAD ROUND FAILED."
-        );
-
-        const emergencyQueries = [
-          "city",
-          "nature",
-          "landscape",
-          "night",
-          "concert"
-        ];
-
-        for (
-          const query of emergencyQueries
-        ) {
-
-          try {
-
-            const emergencyVideos =
-              await searchWikimediaVideos(
-                query
-              );
-
-            for (
-              const video of emergencyVideos
-            ) {
-
-              if (
-                downloadedFiles.length >= 3
-              ) {
-                break;
-              }
-
-              const index =
-                downloadedFiles.length;
-
-              const extension =
-                getVideoExtension(
-                  video
-                );
-
-              const destination =
-                path.join(
-                  workDir,
-                  `emergency-${index}.${extension}`
-                );
-
-              try {
-
-                console.log(
-                  "EMERGENCY DOWNLOAD:",
-                  video.title
-                );
-
-                await downloadVideo(
-                  video.url,
-                  destination
-                );
-
-                downloadedFiles.push({
-                  file:
-                    destination,
-
-                  source:
-                    video
-                });
-
-              } catch (emergencyDownloadError) {
-
-                console.error(
-                  "EMERGENCY DOWNLOAD ERROR:",
-                  emergencyDownloadError.message
-                );
-
-                try {
-
-                  fs.unlinkSync(
-                    destination
-                  );
-
-                } catch (_) {}
-
-              }
-
-            }
-
-            if (
-              downloadedFiles.length > 0
-            ) {
-              break;
-            }
-
-          } catch (emergencySearchError) {
-
-            console.error(
-              "EMERGENCY SEARCH ERROR:",
-              emergencySearchError.message
-            );
-
-          }
-
-        }
-      }
-
-      if (
-        downloadedFiles.length === 0
-      ) {
-
-        return res.status(500).json({
-          error:
-            "Bulunan ücretsiz videolar indirilemedi."
-        });
-      }
-
-      console.log(
-        "DOWNLOADABLE VIDEOS:",
-        downloadedFiles.length
-      );
-
-      const segmentFiles = [];
-
-      const segmentDuration =
-        safeDuration <= 10
-          ? safeDuration
-          : 10;
-
-      let remainingDuration =
-        safeDuration;
-
-      let segmentIndex =
-        0;
-
-      let sourceIndex =
-        0;
-
-      while (
-        remainingDuration > 0
-      ) {
-
-        const source =
-          downloadedFiles[
-            sourceIndex %
-            downloadedFiles.length
-          ];
-
-        const currentDuration =
-          Math.min(
-            segmentDuration,
-            remainingDuration
-          );
-
-        const segmentFile =
-          path.join(
-            workDir,
-            `segment-${segmentIndex}.mp4`
-          );
-
-        try {
-
-          console.log(
-            "CREATING SEGMENT:",
-            segmentIndex,
-            "duration:",
-            currentDuration,
-            "source:",
-            source.source.title
-          );
-
-          await createVideoSegment(
-            source.file,
-            segmentFile,
-            currentDuration,
-            orientation
-          );
-
-          segmentFiles.push(
-            segmentFile
-          );
-
-          remainingDuration -=
-            currentDuration;
-
-          segmentIndex++;
-          sourceIndex++;
-
-        } catch (segmentError) {
-
-          console.error(
-            "VIDEO SEGMENT ERROR:",
-            segmentError.message
-          );
-
-          sourceIndex++;
-
-          if (
-            sourceIndex >
-            downloadedFiles.length * 3 &&
-            segmentFiles.length === 0
-          ) {
-
-            break;
-          }
-
-        }
-
-        if (
-          segmentIndex > 60
-        ) {
-          break;
-        }
-
-      }
-
-      if (
-        segmentFiles.length === 0
-      ) {
-
-        return res.status(500).json({
-          error:
-            "Video klipleri oluşturulamadı."
-        });
-      }
-
-      console.log(
-        "VIDEO SEGMENTS CREATED:",
-        segmentFiles.length
-      );
-
-      const combinedFile =
-        path.join(
-          workDir,
-          "combined.mp4"
-        );
-
-      await concatVideos(
-        segmentFiles,
-        combinedFile
-      );
-
-      const finalFile =
-        path.join(
-          workDir,
-          "nova-video.mp4"
-        );
-
-      await execFileAsync(
-        "ffmpeg",
-        [
-          "-y",
-
-          "-i",
-          combinedFile,
-
-          "-t",
-          String(safeDuration),
-
-          "-an",
-
-          "-c:v",
-          "libx264",
-
-          "-preset",
-          "veryfast",
-
-          "-crf",
-          "28",
-
-          "-pix_fmt",
-          "yuv420p",
-
-          "-movflags",
-          "+faststart",
-
-          finalFile
-        ],
-        {
-          maxBuffer:
-            10 * 1024 * 1024
-        }
-      );
-
-      if (
-        !fs.existsSync(
-          finalFile
-        )
-      ) {
-
-        return res.status(500).json({
-          error:
-            "Final MP4 oluşturulamadı."
-        });
-      }
-
-      const finalStats =
-        fs.statSync(
-          finalFile
-        );
-
-      if (
-        finalStats.size <= 0
-      ) {
-
-        return res.status(500).json({
-          error:
-            "Final MP4 boş."
-        });
-      }
-
-      console.log(
-        "NOVA VIDEO CREATED:",
-        finalStats.size,
-        "bytes"
-      );
-
-      console.log(
-        "VIDEO SOURCES:"
-      );
-
-      for (
-        const item of downloadedFiles
-      ) {
-
-        console.log(
-          "-",
-          item.source.title,
-          item.source.url
-        );
-
-      }
-
-      res.setHeader(
-        "Content-Type",
-        "video/mp4"
-      );
-
-      res.setHeader(
-        "Content-Disposition",
-        'inline; filename="nova-video.mp4"'
-      );
-
-      res.setHeader(
-        "Cache-Control",
-        "no-store"
-      );
-
-      return res.sendFile(
-        finalFile
-      );
-
-    } catch (error) {
-
-      console.error(
-        "VIDEO GENERATION ERROR:",
-        error
-      );
-
-      return res.status(500).json({
-        error:
-          "NOVA video generation server error.",
-
-        details:
-          error.message
-      });
-
-    } finally {
-
-      setTimeout(
-        () => {
-
-          try {
-
-            fs.rmSync(
-              workDir,
-              {
-                recursive: true,
-                force: true
-              }
-            );
-
-            console.log(
-              "NOVA temporary video files deleted."
-            );
-
-          } catch (cleanupError) {
-
-            console.error(
-              "VIDEO CLEANUP ERROR:",
-              cleanupError.message
-            );
-
-          }
-
-        },
-        120000
-      );
-
-    }
-  }
-);
-
-// =============================================================
-// SERVER
-// =============================================================
-
-app.listen(
-  PORT,
-  () => {
-
-    console.log(
-      `NOVA Music Server listening on port ${PORT}`
-    );
-
-  }
-);
+             
