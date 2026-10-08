@@ -221,6 +221,11 @@ async function waitForWanResult(
     response.status
   );
 
+  console.log(
+    "WAN RESULT RAW RESPONSE:",
+    responseText
+  );
+
   if (!response.ok) {
 
     throw new Error(
@@ -263,7 +268,31 @@ async function waitForWanResult(
         ? dataMatch[1].trim()
         : "";
 
+    console.log(
+      "WAN SSE BLOCK:",
+      block
+    );
+
+    console.log(
+      "WAN EVENT:",
+      eventName
+    );
+
+    console.log(
+      "WAN DATA:",
+      dataText
+    );
+
     if (!dataText) {
+
+      if (
+        eventName === "complete"
+      ) {
+
+        return null;
+
+      }
+
       continue;
     }
 
@@ -286,19 +315,41 @@ async function waitForWanResult(
     lastData =
       parsedData;
 
-    console.log(
-      "WAN EVENT:",
-      eventName
-    );
-
     if (
       eventName === "error"
     ) {
 
-      throw new Error(
+      let errorMessage = "";
+
+      if (
         typeof parsedData === "string"
-          ? parsedData
-          : JSON.stringify(parsedData)
+      ) {
+
+        errorMessage =
+          parsedData;
+
+      } else if (
+        parsedData &&
+        typeof parsedData === "object"
+      ) {
+
+        errorMessage =
+          parsedData.message ||
+          parsedData.error ||
+          parsedData.detail ||
+          JSON.stringify(
+            parsedData
+          );
+
+      } else {
+
+        errorMessage =
+          "WAN returned an error event with no error details.";
+
+      }
+
+      throw new Error(
+        `WAN generation error: ${errorMessage}`
       );
     }
 
@@ -317,7 +368,8 @@ async function waitForWanResult(
   }
 
   throw new Error(
-    "WAN video generation returned no result."
+    "WAN video generation returned no result. Raw response: " +
+    responseText
   );
 }
 
@@ -700,27 +752,100 @@ app.post(
         }
       };
 
+      // =======================================================
+      // WAN 2.2 GÜNCEL PARAMETRE SIRASI
+      // =======================================================
+      //
+      // input_image
+      // prompt
+      // steps
+      // negative_prompt
+      // duration_seconds
+      // guidance_scale
+      // guidance_scale_2
+      // seed
+      // randomize_seed
+      //
+      // =======================================================
+
+      const wanSteps =
+        6;
+
+      const wanNegativePrompt =
+        "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality";
+
+      const wanGuidanceScale =
+        1;
+
+      const wanGuidanceScale2 =
+        1;
+
+      const wanSeed =
+        42;
+
+      const wanRandomizeSeed =
+        true;
+
       const wanData = [
 
         imageFileData,
 
         prompt,
 
+        wanSteps,
+
+        wanNegativePrompt,
+
         duration,
 
-        "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
+        wanGuidanceScale,
 
-        6,
+        wanGuidanceScale2,
 
-        5,
+        wanSeed,
 
-        5,
-
-        42,
-
-        true
+        wanRandomizeSeed
 
       ];
+
+      console.log(
+        "WAN DATA PARAMETER ORDER:"
+      );
+
+      console.log(
+        JSON.stringify(
+          {
+            input_image:
+              "[uploaded image]",
+
+            prompt:
+              prompt,
+
+            steps:
+              wanSteps,
+
+            negative_prompt:
+              wanNegativePrompt,
+
+            duration_seconds:
+              duration,
+
+            guidance_scale:
+              wanGuidanceScale,
+
+            guidance_scale_2:
+              wanGuidanceScale2,
+
+            seed:
+              wanSeed,
+
+            randomize_seed:
+              wanRandomizeSeed
+          },
+          null,
+          2
+        )
+      );
 
       const generateResponse =
         await fetch(
@@ -764,6 +889,7 @@ app.post(
           ok: false,
           error:
             "WAN video generation request failed.",
+
           details:
             generateText
         });
@@ -784,6 +910,7 @@ app.post(
           ok: false,
           error:
             "WAN returned invalid generation response.",
+
           details:
             generateText
         });
@@ -798,6 +925,7 @@ app.post(
           ok: false,
           error:
             "WAN did not return an event_id.",
+
           details:
             generateData
         });
@@ -834,8 +962,10 @@ app.post(
 
         return res.status(502).json({
           ok: false,
+
           error:
             "WAN completed but video file was not found.",
+
           result:
             result
         });
@@ -884,8 +1014,10 @@ app.post(
 
       return res.status(500).json({
         ok: false,
+
         error:
           "NOVA WAN video generation server error.",
+
         details:
           error?.message ||
           String(error)
@@ -1006,6 +1138,7 @@ app.get(
 
       return res.status(500).json({
         ok: false,
+
         error:
           error.message
       });
@@ -1357,6 +1490,7 @@ Sadece bu şarkı sözünü döndür.
         return res.status(502).json({
           error:
             "Gemini returned invalid JSON.",
+
           details:
             responseText
         });
@@ -1378,6 +1512,7 @@ Sadece bu şarkı sözünü döndür.
         return res.status(502).json({
           error:
             "Gemini returned empty lyrics.",
+
           details:
             data
         });
@@ -1412,10 +1547,6 @@ Sadece bu şarkı sözünü döndür.
 
 // =============================================================
 // PREPARE VIDEO
-// =============================================================
-//
-// Mevcut Android akışını bozmamak için endpoint korunuyor.
-//
 // =============================================================
 
 app.post(
