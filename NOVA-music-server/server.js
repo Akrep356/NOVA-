@@ -742,9 +742,30 @@ app.post(
         uploadedPath
       );
 
+      // =======================================================
+      // GRADIO FILEDATA
+      // =======================================================
+      //
+      // WAN 2.2 Gradio API'ye gönderilen dosya bilgisini
+      // mümkün olduğunca eksiksiz gönderiyoruz.
+      //
+      // =======================================================
+
       const imageFileData = {
         path:
           uploadedPath,
+
+        orig_name:
+          filename,
+
+        size:
+          imageBuffer.length,
+
+        mime_type:
+          imageMimeType,
+
+        is_stream:
+          false,
 
         meta: {
           _type:
