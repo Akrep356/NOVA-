@@ -4,8 +4,8 @@ import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -51,9 +51,14 @@ class MainActivity : Activity() {
     private val videoServerUrl =
         "https://nova-cf5h.onrender.com/prepare-video"
 
-    // YENİ: WAN 2.2
+    // WAN 2.2
     private val wanVideoServerUrl =
         "https://nova-cf5h.onrender.com/wan-video"
+
+    // YENİ:
+    // WAN videosu + NOVA müziğini birleştirecek endpoint
+    private val mergeVideoAudioServerUrl =
+        "https://nova-cf5h.onrender.com/merge-video-audio"
 
     private val musicDurationSeconds = 190
 
@@ -76,6 +81,7 @@ class MainActivity : Activity() {
     // =========================================================
 
     private var selectedArtistImageBase64: String? = null
+
     private var selectedArtistImageMimeType: String =
         "image/jpeg"
 
@@ -485,7 +491,8 @@ class MainActivity : Activity() {
             "\nNOVA hazır.\n\n" +
             "Müzik üretimi Render + Stable Audio üzerinden yapılır.\n" +
             "Şarkı sözleri Gemini üzerinden oluşturulur.\n" +
-            "WAN 2.2 sanatçı fotoğrafını hareketli videoya dönüştürür."
+            "WAN 2.2 sanatçı fotoğrafını hareketli videoya dönüştürür.\n" +
+            "Müzik klibi oluşturulduğunda görüntü ve ses birleştirilir."
 
         info.textSize =
             13f
@@ -501,7 +508,7 @@ class MainActivity : Activity() {
             info,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(140)
+                dp(160)
             )
         )
     }
@@ -2090,11 +2097,6 @@ class MainActivity : Activity() {
 
             try {
 
-                val mime =
-                    contentResolver
-                        .getType(uri)
-                        ?: "image/jpeg"
-
                 val input =
                     contentResolver
                         .openInputStream(uri)
@@ -2123,8 +2125,7 @@ class MainActivity : Activity() {
                     }
 
                     // -------------------------------------------------
-                    // WAN için fotoğrafı küçült.
-                    // Böylece Base64 çok büyümez.
+                    // WAN için fotoğrafı küçült
                     // -------------------------------------------------
 
                     val maxDimension =
@@ -2193,7 +2194,11 @@ class MainActivity : Activity() {
                         outputStream
                     )
 
-                    bitmap.recycle()
+                    if (
+                        bitmap != originalBitmap
+                    ) {
+                        bitmap.recycle()
+                    }
 
                     if (
                         originalBitmap != bitmap
@@ -2360,10 +2365,10 @@ class MainActivity : Activity() {
                 }
 
                 // -------------------------------------------------
-                // MP4 dosyasını cache'e kaydet
+                // WAN MP4 dosyasını cache'e kaydet
                 // -------------------------------------------------
 
-                val videoFile =
+                val wanVideoFile =
                     File(
                         cacheDir,
                         "nova_wan_video.mp4"
@@ -2379,7 +2384,7 @@ class MainActivity : Activity() {
                             bufferedInput ->
 
                             FileOutputStream(
-                                videoFile
+                                wanVideoFile
                             ).use { output ->
 
                                 val buffer =
@@ -2410,8 +2415,8 @@ class MainActivity : Activity() {
                     }
 
                 if (
-                    !videoFile.exists() ||
-                    videoFile.length() <= 0
+                    !wanVideoFile.exists() ||
+                    wanVideoFile.length() <= 0
                 ) {
 
                     throw Exception(
@@ -2419,63 +2424,56 @@ class MainActivity : Activity() {
                     )
                 }
 
-                generatedVideoFile =
-                    videoFile
-
                 runOnUiThread {
-
-                    val preview =
-                        videoPreview
-
-                    if (
-                        preview != null
-                    ) {
-
-                        try {
-
-                            val controller =
-                                MediaController(
-                                    this
-                                )
-
-                            controller.setAnchorView(
-                                preview
-                            )
-
-                            preview.setMediaController(
-                                controller
-                            )
-
-                            preview.setVideoURI(
-                                Uri.fromFile(
-                                    videoFile
-                                )
-                            )
-
-                            preview.setOnPreparedListener {
-                                it.isLooping = false
-                            }
-
-                            preview.start()
-
-                        } catch (
-                            e: Exception
-                        ) {
-
-                            Toast.makeText(
-                                this,
-                                "Video önizleme hatası:\n${e.message}",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
 
                     Toast.makeText(
                         this,
-                        "🎬 WAN 2.2 videosu hazır!",
+                        "🎬 WAN videosu hazır.\nŞimdi müzik kontrol ediliyor...",
                         Toast.LENGTH_LONG
                     ).show()
                 }
+
+                // -------------------------------------------------
+                // MÜZİK KONTROLÜ
+                // -------------------------------------------------
+
+                val audioFile =
+                    generatedAudioFile
+
+                if (
+                    audioFile == null ||
+                    !audioFile.exists() ||
+                    audioFile.length() <= 0
+                ) {
+
+                    generatedVideoFile =
+                        wanVideoFile
+
+                    runOnUiThread {
+
+                        showVideoFile(
+                            wanVideoFile
+                        )
+
+                        Toast.makeText(
+                            this,
+                            "⚠️ WAN videosu hazır fakat NOVA müziği bulunamadı.\n" +
+                                "Bu nedenle yalnızca sessiz video gösteriliyor.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    return@Thread
+                }
+
+                // -------------------------------------------------
+                // VIDEO + SES BİRLEŞTİR
+                // -------------------------------------------------
+
+                mergeVideoWithAudio(
+                    wanVideoFile,
+                    audioFile
+                )
 
             } catch (
                 e: Exception
@@ -2496,6 +2494,331 @@ class MainActivity : Activity() {
             }
 
         }.start()
+    }
+
+    // =========================================================
+    // VIDEO + AUDIO MERGE
+    // =========================================================
+
+    private fun mergeVideoWithAudio(
+        videoFile: File,
+        audioFile: File
+    ) {
+
+        runOnUiThread {
+
+            Toast.makeText(
+                this,
+                "🎵 + 🎬 Görüntü ve müzik birleştiriliyor...\n" +
+                    "Lütfen bekle.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        Thread {
+
+            var connection:
+                    HttpURLConnection? = null
+
+            try {
+
+                if (
+                    !videoFile.exists() ||
+                    videoFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "Birleştirme için video dosyası bulunamadı."
+                    )
+                }
+
+                if (
+                    !audioFile.exists() ||
+                    audioFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "Birleştirme için müzik dosyası bulunamadı."
+                    )
+                }
+
+                // -------------------------------------------------
+                // Base64
+                // -------------------------------------------------
+
+                val videoBytes =
+                    videoFile.readBytes()
+
+                val audioBytes =
+                    audioFile.readBytes()
+
+                val videoBase64 =
+                    Base64.encodeToString(
+                        videoBytes,
+                        Base64.NO_WRAP
+                    )
+
+                val audioBase64 =
+                    Base64.encodeToString(
+                        audioBytes,
+                        Base64.NO_WRAP
+                    )
+
+                // -------------------------------------------------
+                // Render
+                // -------------------------------------------------
+
+                val url =
+                    URL(
+                        mergeVideoAudioServerUrl
+                    )
+
+                connection =
+                    url.openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    60_000
+
+                connection.readTimeout =
+                    15 * 60 * 1000
+
+                connection.doOutput =
+                    true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "video/mp4, application/json"
+                )
+
+                val json =
+                    """
+                    {
+                      "videoBase64":"${jsonEscape(videoBase64)}",
+                      "audioBase64":"${jsonEscape(audioBase64)}",
+                      "videoMimeType":"video/mp4",
+                      "audioMimeType":"audio/mpeg"
+                    }
+                    """.trimIndent()
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+
+                    output.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                if (
+                    responseCode !in 200..299
+                ) {
+
+                    val errorText =
+                        try {
+
+                            connection
+                                .errorStream
+                                ?.bufferedReader()
+                                ?.use {
+                                    it.readText()
+                                }
+                                ?: "Video + ses sunucu hatası"
+
+                        } catch (
+                            _: Exception
+                        ) {
+
+                            "Video + ses sunucu hatası"
+                        }
+
+                    runOnUiThread {
+
+                        Toast.makeText(
+                            this,
+                            "🎵🎬 Birleştirme başarısız:\n$errorText",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    return@Thread
+                }
+
+                // -------------------------------------------------
+                // SESLİ MP4
+                // -------------------------------------------------
+
+                val finalVideoFile =
+                    File(
+                        cacheDir,
+                        "nova_music_video.mp4"
+                    )
+
+                connection
+                    .inputStream
+                    .use { input ->
+
+                        BufferedInputStream(
+                            input
+                        ).use {
+                            bufferedInput ->
+
+                            FileOutputStream(
+                                finalVideoFile
+                            ).use { output ->
+
+                                val buffer =
+                                    ByteArray(
+                                        16 * 1024
+                                    )
+
+                                var count: Int
+
+                                while (
+                                    bufferedInput
+                                        .read(buffer)
+                                        .also {
+                                            count = it
+                                        } != -1
+                                ) {
+
+                                    output.write(
+                                        buffer,
+                                        0,
+                                        count
+                                    )
+                                }
+
+                                output.flush()
+                            }
+                        }
+                    }
+
+                if (
+                    !finalVideoFile.exists() ||
+                    finalVideoFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "Render boş sesli video gönderdi."
+                    )
+                }
+
+                generatedVideoFile =
+                    finalVideoFile
+
+                runOnUiThread {
+
+                    showVideoFile(
+                        finalVideoFile
+                    )
+
+                    Toast.makeText(
+                        this,
+                        "🎬🔊 NOVA MÜZİK KLİBİ HAZIR!\n" +
+                            "Görüntü ve ses birleştirildi.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (
+                e: Exception
+            ) {
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "Video + ses hatası:\n${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } finally {
+
+                connection?.disconnect()
+            }
+
+        }.start()
+    }
+
+    // =========================================================
+    // VIDEO GÖSTER
+    // =========================================================
+
+    private fun showVideoFile(
+        videoFile: File
+    ) {
+
+        val preview =
+            videoPreview
+
+        if (
+            preview == null
+        ) {
+
+            return
+        }
+
+        try {
+
+            val controller =
+                MediaController(
+                    this
+                )
+
+            controller.setAnchorView(
+                preview
+            )
+
+            preview.setMediaController(
+                controller
+            )
+
+            preview.setVideoURI(
+                Uri.fromFile(
+                    videoFile
+                )
+            )
+
+            preview.setOnPreparedListener {
+                it.isLooping = false
+            }
+
+            preview.setOnCompletionListener {
+
+                Toast.makeText(
+                    this,
+                    "🎬 Video tamamlandı.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            preview.start()
+
+        } catch (
+            e: Exception
+        ) {
+
+            Toast.makeText(
+                this,
+                "Video önizleme hatası:\n${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     // =========================================================
@@ -2674,25 +2997,9 @@ class MainActivity : Activity() {
 
                 runOnUiThread {
 
-                    val preview =
-                        videoPreview
-
-                    if (
-                        preview != null
-                    ) {
-
-                        preview.setVideoURI(
-                            Uri.fromFile(
-                                videoFile
-                            )
-                        )
-
-                        preview.setOnPreparedListener {
-                            it.isLooping = false
-                        }
-
-                        preview.start()
-                    }
+                    showVideoFile(
+                        videoFile
+                    )
 
                     Toast.makeText(
                         this,
@@ -2755,7 +3062,7 @@ class MainActivity : Activity() {
 
                     put(
                         MediaStore.MediaColumns.DISPLAY_NAME,
-                        "NOVA_Video_${System.currentTimeMillis()}.mp4"
+                        "NOVA_Music_Video_${System.currentTimeMillis()}.mp4"
                     )
 
                     put(
@@ -2860,7 +3167,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "💾 Video telefona kaydedildi.",
+                "💾 Sesli müzik klibi telefona kaydedildi.",
                 Toast.LENGTH_LONG
             ).show()
 
