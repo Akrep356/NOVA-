@@ -3,6 +3,8 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { pipeline } = require("stream/promises");
+const { Readable } = require("stream");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -49,78 +51,6 @@ function getHFHeaders(extraHeaders = {}) {
   }
 
   return headers;
-}
-
-// =============================================================
-// TEMP DIRECTORY
-// =============================================================
-
-function createTempDirectory() {
-
-  return fs.mkdtempSync(
-    path.join(
-      os.tmpdir(),
-      "nova-"
-    )
-  );
-}
-
-// =============================================================
-// FFmpeg
-// =============================================================
-
-async function runFFmpeg(
-  args
-) {
-
-  console.log(
-    "FFmpeg:",
-    args.join(" ")
-  );
-
-  try {
-
-    const result =
-      await execFileAsync(
-        "ffmpeg",
-        args,
-        {
-          maxBuffer:
-            10 * 1024 * 1024
-        }
-      );
-
-    if (result.stdout) {
-
-      console.log(
-        "FFmpeg stdout:",
-        result.stdout
-      );
-
-    }
-
-    if (result.stderr) {
-
-      console.log(
-        "FFmpeg stderr:",
-        result.stderr
-      );
-
-    }
-
-    return result;
-
-  } catch (error) {
-
-    console.error(
-      "FFmpeg ERROR:",
-      error?.stderr ||
-      error?.message ||
-      error
-    );
-
-    throw error;
-  }
 }
 
 // =============================================================
@@ -360,6 +290,7 @@ async function waitForWanResult(
       ) {
 
         return null;
+
       }
 
       continue;
@@ -378,6 +309,7 @@ async function waitForWanResult(
 
       parsedData =
         dataText;
+
     }
 
     lastData =
@@ -413,6 +345,7 @@ async function waitForWanResult(
 
         errorMessage =
           "WAN returned an error event with no error details.";
+
       }
 
       throw new Error(
@@ -431,6 +364,7 @@ async function waitForWanResult(
   if (lastData !== null) {
 
     return lastData;
+
   }
 
   throw new Error(
@@ -448,7 +382,6 @@ function buildWanFileUrl(
 ) {
 
   if (!filePath) {
-
     return null;
   }
 
@@ -469,10 +402,6 @@ function buildWanFileUrl(
   );
 }
 
-// =============================================================
-// FIND WAN VIDEO
-// =============================================================
-
 function findWanVideoFile(
   result
 ) {
@@ -487,7 +416,6 @@ function findWanVideoFile(
       value === null ||
       value === undefined
     ) {
-
       return;
     }
 
@@ -514,6 +442,7 @@ function findWanVideoFile(
         walk(
           item
         );
+
       }
 
       return;
@@ -533,6 +462,7 @@ function findWanVideoFile(
           type:
             "url"
         });
+
       }
 
       if (
@@ -545,6 +475,7 @@ function findWanVideoFile(
           type:
             "path"
         });
+
       }
 
       if (
@@ -557,6 +488,7 @@ function findWanVideoFile(
           type:
             "name"
         });
+
       }
 
       for (
@@ -566,6 +498,7 @@ function findWanVideoFile(
         walk(
           value[key]
         );
+
       }
     }
   }
@@ -591,6 +524,7 @@ function findWanVideoFile(
     ) {
 
       return videoItem.value;
+
     }
 
     return buildWanFileUrl(
@@ -626,7 +560,7 @@ function findWanVideoFile(
 }
 
 // =============================================================
-// DOWNLOAD WAN VIDEO
+// WAN VIDEO DOWNLOAD
 // =============================================================
 
 async function downloadWanVideo(
@@ -678,201 +612,7 @@ async function downloadWanVideo(
 }
 
 // =============================================================
-// BASE64 BUFFER
-// =============================================================
-
-function base64ToBuffer(
-  base64
-) {
-
-  const cleanBase64 =
-    String(
-      base64 || ""
-    ).replace(
-      /^data:[^;]+;base64,/i,
-      ""
-    );
-
-  if (!cleanBase64) {
-
-    throw new Error(
-      "Base64 data is empty."
-    );
-  }
-
-  const buffer =
-    Buffer.from(
-      cleanBase64,
-      "base64"
-    );
-
-  if (
-    !buffer ||
-    buffer.length <= 0
-  ) {
-
-    throw new Error(
-      "Base64 data could not be decoded."
-    );
-  }
-
-  return buffer;
-}
-
-// =============================================================
-// MERGE WAN VIDEO + MUSIC
-// =============================================================
-
-async function mergeVideoWithAudio(
-  videoBuffer,
-  audioBuffer
-) {
-
-  const tempDir =
-    createTempDirectory();
-
-  const inputVideo =
-    path.join(
-      tempDir,
-      "wan-input.mp4"
-    );
-
-  const inputAudio =
-    path.join(
-      tempDir,
-      "music-input.mp3"
-    );
-
-  const outputVideo =
-    path.join(
-      tempDir,
-      "nova-final.mp4"
-    );
-
-  try {
-
-    fs.writeFileSync(
-      inputVideo,
-      videoBuffer
-    );
-
-    fs.writeFileSync(
-      inputAudio,
-      audioBuffer
-    );
-
-    console.log(
-      "MERGE VIDEO SIZE:",
-      videoBuffer.length
-    );
-
-    console.log(
-      "MERGE AUDIO SIZE:",
-      audioBuffer.length
-    );
-
-    // ---------------------------------------------------------
-    // Video kısa ise video sürekli döngüye alınır.
-    // Sesin süresi kadar video devam eder.
-    // ---------------------------------------------------------
-
-    await runFFmpeg([
-      "-y",
-
-      "-stream_loop",
-      "-1",
-
-      "-i",
-      inputVideo,
-
-      "-i",
-      inputAudio,
-
-      "-map",
-      "0:v:0",
-
-      "-map",
-      "1:a:0",
-
-      "-c:v",
-      "libx264",
-
-      "-preset",
-      "veryfast",
-
-      "-crf",
-      "23",
-
-      "-pix_fmt",
-      "yuv420p",
-
-      "-c:a",
-      "aac",
-
-      "-b:a",
-      "192k",
-
-      "-shortest",
-
-      "-movflags",
-      "+faststart",
-
-      outputVideo
-    ]);
-
-    if (
-      !fs.existsSync(
-        outputVideo
-      )
-    ) {
-
-      throw new Error(
-        "FFmpeg final video oluşturmadı."
-      );
-    }
-
-    const finalBuffer =
-      fs.readFileSync(
-        outputVideo
-      );
-
-    if (
-      finalBuffer.length <= 0
-    ) {
-
-      throw new Error(
-        "FFmpeg final video boş."
-      );
-    }
-
-    console.log(
-      "FINAL VIDEO SIZE:",
-      finalBuffer.length
-    );
-
-    return finalBuffer;
-
-  } finally {
-
-    try {
-
-      fs.rmSync(
-        tempDir,
-        {
-          recursive:
-            true,
-          force:
-            true
-        }
-      );
-
-    } catch (_) {
-    }
-  }
-}
-
-// =============================================================
-// WAN VIDEO
+// WAN 2.2 VIDEO
 // =============================================================
 
 app.post(
@@ -901,31 +641,38 @@ app.post(
           req.body?.duration ?? 3.5
         );
 
-      // ---------------------------------------------------------
-      // YENİ:
-      // MainActivity daha sonra oluşturduğu MP3'ü gönderecek.
-      // ---------------------------------------------------------
-
-      const audioBase64 =
-        typeof req.body?.audioBase64 === "string"
-          ? req.body.audioBase64
-          : "";
-
       if (!imageBase64) {
 
         return res.status(400).json({
-          ok:
-            false,
-
+          ok: false,
           error:
             "imageBase64 is required."
         });
       }
 
-      const imageBuffer =
-        base64ToBuffer(
-          imageBase64
+      const cleanBase64 =
+        imageBase64.replace(
+          /^data:[^;]+;base64,/i,
+          ""
         );
+
+      const imageBuffer =
+        Buffer.from(
+          cleanBase64,
+          "base64"
+        );
+
+      if (
+        !imageBuffer ||
+        imageBuffer.length <= 0
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Image data is empty."
+        });
+      }
 
       const MAX_IMAGE_SIZE =
         15 * 1024 * 1024;
@@ -936,40 +683,10 @@ app.post(
       ) {
 
         return res.status(413).json({
-          ok:
-            false,
-
+          ok: false,
           error:
             "Image is too large. Maximum size is 15 MB."
         });
-      }
-
-      let audioBuffer =
-        null;
-
-      if (audioBase64) {
-
-        audioBuffer =
-          base64ToBuffer(
-            audioBase64
-          );
-
-        const MAX_AUDIO_SIZE =
-          100 * 1024 * 1024;
-
-        if (
-          audioBuffer.length >
-          MAX_AUDIO_SIZE
-        ) {
-
-          return res.status(413).json({
-            ok:
-              false,
-
-            error:
-              "Audio is too large. Maximum size is 100 MB."
-          });
-        }
       }
 
       const duration =
@@ -986,28 +703,13 @@ app.post(
       );
 
       console.log(
-        "NOVA WAN 2.2 VIDEO REQUEST"
+        "WAN 2.2 VIDEO REQUEST"
       );
 
       console.log(
         "Image size:",
         imageBuffer.length
       );
-
-      console.log(
-        "Audio included:",
-        Boolean(
-          audioBuffer
-        )
-      );
-
-      if (audioBuffer) {
-
-        console.log(
-          "Audio size:",
-          audioBuffer.length
-        );
-      }
 
       console.log(
         "Prompt:",
@@ -1022,10 +724,6 @@ app.post(
       console.log(
         "================================================="
       );
-
-      // ---------------------------------------------------------
-      // WAN IMAGE UPLOAD
-      // ---------------------------------------------------------
 
       const filename =
         imageMimeType.includes("png")
@@ -1045,7 +743,6 @@ app.post(
       );
 
       const imageFileData = {
-
         path:
           uploadedPath,
 
@@ -1056,7 +753,7 @@ app.post(
       };
 
       // =======================================================
-      // WAN PARAMETRELERİ
+      // WAN 2.2 PARAMETRELERİ
       // =======================================================
 
       const wanSteps =
@@ -1138,10 +835,6 @@ app.post(
         )
       );
 
-      // =======================================================
-      // WAN GENERATE
-      // =======================================================
-
       const generateResponse =
         await fetch(
           `${HF_WAN_SPACE}/gradio_api/call/generate_video`,
@@ -1181,13 +874,9 @@ app.post(
       ) {
 
         return res.status(502).json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             "WAN video generation request failed.",
-
           details:
             generateText
         });
@@ -1205,13 +894,9 @@ app.post(
       } catch (_) {
 
         return res.status(502).json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             "WAN returned invalid generation response.",
-
           details:
             generateText
         });
@@ -1223,13 +908,9 @@ app.post(
       if (!eventId) {
 
         return res.status(502).json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             "WAN did not return an event_id.",
-
           details:
             generateData
         });
@@ -1265,13 +946,9 @@ app.post(
       if (!videoUrl) {
 
         return res.status(502).json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             "WAN completed but video file was not found.",
-
           result:
             result
         });
@@ -1292,41 +969,6 @@ app.post(
         videoBuffer.length
       );
 
-      // =======================================================
-      // SES VARSA:
-      // WAN VIDEO + MP3 → FFmpeg
-      // =======================================================
-
-      let finalVideoBuffer =
-        videoBuffer;
-
-      if (audioBuffer) {
-
-        console.log(
-          "🎵 AUDIO + VIDEO MERGE STARTED"
-        );
-
-        finalVideoBuffer =
-          await mergeVideoWithAudio(
-            videoBuffer,
-            audioBuffer
-          );
-
-        console.log(
-          "🎵 AUDIO + VIDEO MERGE COMPLETED"
-        );
-
-      } else {
-
-        console.log(
-          "ℹ️ Audio gönderilmedi. Sadece WAN video döndürülecek."
-        );
-      }
-
-      // =======================================================
-      // RESPONSE
-      // =======================================================
-
       res.setHeader(
         "Content-Type",
         "video/mp4"
@@ -1343,7 +985,7 @@ app.post(
       );
 
       return res.send(
-        finalVideoBuffer
+        videoBuffer
       );
 
     } catch (error) {
@@ -1354,12 +996,536 @@ app.post(
       );
 
       return res.status(500).json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           "NOVA WAN video generation server error.",
+        details:
+          error?.message ||
+          String(error)
+      });
+    }
+  }
+);
+
+// =============================================================
+// VIDEO + AUDIO MERGE
+// =============================================================
+//
+// Android MainActivity.kt buraya gelir:
+//
+// POST /merge-video-audio
+//
+// videoBase64 = WAN 2.2 MP4
+// audioBase64 = NOVA MP3
+//
+// FFmpeg:
+// - WAN videosunu sürekli döndürür
+// - Müziğin tamamı boyunca videoyu devam ettirir
+// - Görüntü ve sesi tek MP4 dosyasında birleştirir
+//
+// =============================================================
+
+app.post(
+  "/merge-video-audio",
+  async (req, res) => {
+
+    let tempDir = null;
+
+    try {
+
+      const videoBase64 =
+        typeof req.body?.videoBase64 === "string"
+          ? req.body.videoBase64
+          : "";
+
+      const audioBase64 =
+        typeof req.body?.audioBase64 === "string"
+          ? req.body.audioBase64
+          : "";
+
+      const videoMimeType =
+        typeof req.body?.videoMimeType === "string"
+          ? req.body.videoMimeType
+          : "video/mp4";
+
+      const audioMimeType =
+        typeof req.body?.audioMimeType === "string"
+          ? req.body.audioMimeType
+          : "audio/mpeg";
+
+      if (!videoBase64) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "videoBase64 is required."
+        });
+      }
+
+      if (!audioBase64) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "audioBase64 is required."
+        });
+      }
+
+      console.log(
+        "================================================="
+      );
+
+      console.log(
+        "NOVA VIDEO + AUDIO MERGE"
+      );
+
+      console.log(
+        "Video MIME:",
+        videoMimeType
+      );
+
+      console.log(
+        "Audio MIME:",
+        audioMimeType
+      );
+
+      console.log(
+        "Video Base64 size:",
+        videoBase64.length
+      );
+
+      console.log(
+        "Audio Base64 size:",
+        audioBase64.length
+      );
+
+      console.log(
+        "================================================="
+      );
+
+      // ---------------------------------------------------------
+      // DATA URI TEMİZLE
+      // ---------------------------------------------------------
+
+      const cleanVideoBase64 =
+        videoBase64.replace(
+          /^data:[^;]+;base64,/i,
+          ""
+        );
+
+      const cleanAudioBase64 =
+        audioBase64.replace(
+          /^data:[^;]+;base64,/i,
+          ""
+        );
+
+      // ---------------------------------------------------------
+      // BUFFER
+      // ---------------------------------------------------------
+
+      const videoBuffer =
+        Buffer.from(
+          cleanVideoBase64,
+          "base64"
+        );
+
+      const audioBuffer =
+        Buffer.from(
+          cleanAudioBase64,
+          "base64"
+        );
+
+      if (
+        videoBuffer.length <= 0
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Video data is empty."
+        });
+      }
+
+      if (
+        audioBuffer.length <= 0
+      ) {
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Audio data is empty."
+        });
+      }
+
+      // ---------------------------------------------------------
+      // BOYUT GÜVENLİĞİ
+      // ---------------------------------------------------------
+
+      const MAX_VIDEO_SIZE =
+        50 * 1024 * 1024;
+
+      const MAX_AUDIO_SIZE =
+        30 * 1024 * 1024;
+
+      if (
+        videoBuffer.length >
+        MAX_VIDEO_SIZE
+      ) {
+
+        return res.status(413).json({
+          ok: false,
+          error:
+            "Video is too large. Maximum size is 50 MB."
+        });
+      }
+
+      if (
+        audioBuffer.length >
+        MAX_AUDIO_SIZE
+      ) {
+
+        return res.status(413).json({
+          ok: false,
+          error:
+            "Audio is too large. Maximum size is 30 MB."
+        });
+      }
+
+      // ---------------------------------------------------------
+      // GEÇİCİ KLASÖR
+      // ---------------------------------------------------------
+
+      tempDir =
+        fs.mkdtempSync(
+          path.join(
+            os.tmpdir(),
+            "nova-merge-"
+          )
+        );
+
+      const inputVideo =
+        path.join(
+          tempDir,
+          "input-video.mp4"
+        );
+
+      const inputAudio =
+        path.join(
+          tempDir,
+          "input-audio.mp3"
+        );
+
+      const outputVideo =
+        path.join(
+          tempDir,
+          "output-video.mp4"
+        );
+
+      // ---------------------------------------------------------
+      // DOSYALARI YAZ
+      // ---------------------------------------------------------
+
+      fs.writeFileSync(
+        inputVideo,
+        videoBuffer
+      );
+
+      fs.writeFileSync(
+        inputAudio,
+        audioBuffer
+      );
+
+      console.log(
+        "FFmpeg input video:",
+        inputVideo
+      );
+
+      console.log(
+        "FFmpeg input audio:",
+        inputAudio
+      );
+
+      // ---------------------------------------------------------
+      // FFmpeg
+      // ---------------------------------------------------------
+      //
+      // -stream_loop -1
+      // WAN videosunu sürekli tekrarlar.
+      //
+      // -shortest
+      // Ses bittiğinde işlem sona erer.
+      //
+      // libx264
+      // MP4 uyumluluğunu artırır.
+      //
+      // AAC
+      // Android uyumlu ses.
+      //
+      // ---------------------------------------------------------
+
+      const ffmpegArgs = [
+
+        "-y",
+
+        "-stream_loop",
+        "-1",
+
+        "-i",
+        inputVideo,
+
+        "-i",
+        inputAudio,
+
+        "-map",
+        "0:v:0",
+
+        "-map",
+        "1:a:0",
+
+        "-c:v",
+        "libx264",
+
+        "-preset",
+        "veryfast",
+
+        "-crf",
+        "23",
+
+        "-pix_fmt",
+        "yuv420p",
+
+        "-c:a",
+        "aac",
+
+        "-b:a",
+        "192k",
+
+        "-ar",
+        "44100",
+
+        "-shortest",
+
+        "-movflags",
+        "+faststart",
+
+        outputVideo
+      ];
+
+      console.log(
+        "FFmpeg command:"
+      );
+
+      console.log(
+        "ffmpeg " +
+        ffmpegArgs.join(" ")
+      );
+
+      const ffmpegResult =
+        await execFileAsync(
+          "ffmpeg",
+          ffmpegArgs,
+          {
+            maxBuffer:
+              20 * 1024 * 1024
+          }
+        );
+
+      if (
+        ffmpegResult?.stdout
+      ) {
+
+        console.log(
+          "FFmpeg STDOUT:",
+          ffmpegResult.stdout
+        );
+      }
+
+      if (
+        ffmpegResult?.stderr
+      ) {
+
+        console.log(
+          "FFmpeg STDERR:",
+          ffmpegResult.stderr
+        );
+      }
+
+      // ---------------------------------------------------------
+      // ÇIKIŞ KONTROLÜ
+      // ---------------------------------------------------------
+
+      if (
+        !fs.existsSync(
+          outputVideo
+        )
+      ) {
+
+        throw new Error(
+          "FFmpeg output video was not created."
+        );
+      }
+
+      const outputStats =
+        fs.statSync(
+          outputVideo
+        );
+
+      if (
+        outputStats.size <= 0
+      ) {
+
+        throw new Error(
+          "FFmpeg created an empty video."
+        );
+      }
+
+      console.log(
+        "FINAL VIDEO SIZE:",
+        outputStats.size
+      );
+
+      // ---------------------------------------------------------
+      // MP4 GÖNDER
+      // ---------------------------------------------------------
+
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        'inline; filename="nova-music-video.mp4"'
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      const outputStream =
+        fs.createReadStream(
+          outputVideo
+        );
+
+      outputStream.on(
+        "error",
+        error => {
+
+          console.error(
+            "FINAL VIDEO STREAM ERROR:",
+            error
+          );
+
+          if (
+            !res.headersSent
+          ) {
+
+            res.status(500).json({
+              ok: false,
+              error:
+                "Final video stream failed.",
+              details:
+                error.message
+            });
+          }
+        }
+      );
+
+      outputStream.on(
+        "close",
+        () => {
+
+          console.log(
+            "FINAL VIDEO STREAM CLOSED"
+          );
+
+          try {
+
+            if (
+              tempDir &&
+              fs.existsSync(
+                tempDir
+              )
+            ) {
+
+              fs.rmSync(
+                tempDir,
+                {
+                  recursive:
+                    true,
+                  force:
+                    true
+                }
+              );
+
+              console.log(
+                "Temporary merge files deleted."
+              );
+            }
+
+          } catch (
+            cleanupError
+          ) {
+
+            console.error(
+              "Cleanup error:",
+              cleanupError
+            );
+          }
+        }
+      );
+
+      return outputStream.pipe(
+        res
+      );
+
+    } catch (error) {
+
+      console.error(
+        "VIDEO + AUDIO MERGE ERROR:",
+        error
+      );
+
+      // ---------------------------------------------------------
+      // CLEANUP
+      // ---------------------------------------------------------
+
+      try {
+
+        if (
+          tempDir &&
+          fs.existsSync(
+            tempDir
+          )
+        ) {
+
+          fs.rmSync(
+            tempDir,
+            {
+              recursive:
+                true,
+              force:
+                true
+            }
+          );
+        }
+
+      } catch (
+        cleanupError
+      ) {
+
+        console.error(
+          "Merge cleanup error:",
+          cleanupError
+        );
+      }
+
+      return res.status(500).json({
+        ok: false,
+
+        error:
+          "NOVA video + audio merge server error.",
 
         details:
           error?.message ||
@@ -1378,7 +1544,6 @@ app.get(
   (_req, res) => {
 
     res.json({
-
       name:
         "NOVA Music Server",
 
@@ -1386,19 +1551,15 @@ app.get(
         "ok",
 
       endpoints: [
-
         "POST /generate",
-
         "POST /generate-lyrics",
-
         "POST /prepare-video",
-
         "GET /wan-api-test",
-
-        "POST /wan-video"
-
+        "POST /wan-video",
+        "POST /merge-video-audio"
       ]
     });
+
   }
 );
 
@@ -1411,7 +1572,6 @@ app.get(
   (_req, res) => {
 
     res.json({
-
       ok:
         true,
 
@@ -1434,8 +1594,12 @@ app.get(
         "Wikimedia Commons + FFmpeg",
 
       wanEngine:
-        "Hugging Face Wan 2.2 I2V + FFmpeg Audio Merge"
+        "Hugging Face Wan 2.2 I2V",
+
+      mergeEngine:
+        "FFmpeg"
     });
+
   }
 );
 
@@ -1486,9 +1650,7 @@ app.get(
       );
 
       return res.status(500).json({
-
-        ok:
-          false,
+        ok: false,
 
         error:
           error.message
@@ -1510,7 +1672,6 @@ app.post(
       if (!STABILITY_API_KEY) {
 
         return res.status(500).json({
-
           error:
             "STABILITY_API_KEY is not configured on the server."
         });
@@ -1524,7 +1685,6 @@ app.post(
       if (!prompt) {
 
         return res.status(400).json({
-
           error:
             "prompt is required."
         });
@@ -1535,7 +1695,6 @@ app.post(
       ) {
 
         return res.status(400).json({
-
           error:
             "prompt is too long."
         });
@@ -1596,7 +1755,6 @@ app.post(
               "POST",
 
             headers: {
-
               authorization:
                 `Bearer ${STABILITY_API_KEY}`,
 
@@ -1631,7 +1789,6 @@ app.post(
             response.status
           )
           .json({
-
             error:
               "Stable Audio request failed.",
 
@@ -1672,7 +1829,6 @@ app.post(
       );
 
       return res.status(500).json({
-
         error:
           "NOVA music generation server error."
       });
@@ -1693,7 +1849,6 @@ app.post(
       if (!GEMINI_API_KEY) {
 
         return res.status(500).json({
-
           error:
             "GEMINI_API_KEY is not configured on the server."
         });
@@ -1707,7 +1862,6 @@ app.post(
       if (!topic) {
 
         return res.status(400).json({
-
           error:
             "topic is required."
         });
@@ -1718,7 +1872,6 @@ app.post(
       ) {
 
         return res.status(400).json({
-
           error:
             "topic is too long."
         });
@@ -1784,7 +1937,6 @@ Sadece bu şarkı sözünü döndür.
               "POST",
 
             headers: {
-
               "Content-Type":
                 "application/json",
 
@@ -1794,24 +1946,18 @@ Sadece bu şarkı sözünü döndür.
 
             body:
               JSON.stringify({
-
                 contents: [
-
                   {
                     parts: [
-
                       {
                         text:
                           prompt
                       }
-
                     ]
                   }
-
                 ],
 
                 generationConfig: {
-
                   maxOutputTokens:
                     3000
                 }
@@ -1835,7 +1981,6 @@ Sadece bu şarkı sözünü döndür.
             response.status
           )
           .json({
-
             error:
               "Gemini request failed.",
 
@@ -1856,7 +2001,6 @@ Sadece bu şarkı sözünü döndür.
       } catch (_) {
 
         return res.status(502).json({
-
           error:
             "Gemini returned invalid JSON.",
 
@@ -1879,7 +2023,6 @@ Sadece bu şarkı sözünü döndür.
       if (!lyrics) {
 
         return res.status(502).json({
-
           error:
             "Gemini returned empty lyrics.",
 
@@ -1889,7 +2032,6 @@ Sadece bu şarkı sözünü döndür.
       }
 
       return res.json({
-
         ok:
           true,
 
@@ -1905,7 +2047,6 @@ Sadece bu şarkı sözünü döndür.
       );
 
       return res.status(500).json({
-
         error:
           "NOVA lyrics generation server error.",
 
@@ -1962,7 +2103,6 @@ app.post(
         );
 
       return res.json({
-
         ok:
           true,
 
@@ -1999,9 +2139,7 @@ app.post(
       );
 
       return res.status(500).json({
-
-        ok:
-          false,
+        ok: false,
 
         error:
           "NOVA video preparation server error.",
