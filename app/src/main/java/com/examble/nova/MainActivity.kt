@@ -55,7 +55,6 @@ class MainActivity : Activity() {
     private val wanVideoServerUrl =
         "https://nova-cf5h.onrender.com/wan-video"
 
-    // YENİ:
     // WAN videosu + NOVA müziğini birleştirecek endpoint
     private val mergeVideoAudioServerUrl =
         "https://nova-cf5h.onrender.com/merge-video-audio"
@@ -702,6 +701,224 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
+    // AUTO MUSIC FOR WAN VIDEO
+    // =========================================================
+
+    private fun generateMusicForWanVideo(
+        prompt: String,
+        wanVideoFile: File
+    ) {
+
+        runOnUiThread {
+
+            Toast.makeText(
+                this,
+                "🎵 NOVA müziği bulunamadı.\n" +
+                    "Şimdi müzik otomatik oluşturuluyor...",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        Thread {
+
+            var connection:
+                    HttpURLConnection? = null
+
+            try {
+
+                if (
+                    !wanVideoFile.exists() ||
+                    wanVideoFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "WAN videosu bulunamadı."
+                    )
+                }
+
+                val cleanPrompt =
+                    prompt.trim()
+
+                if (
+                    cleanPrompt.isEmpty()
+                ) {
+
+                    throw Exception(
+                        "Müzik oluşturmak için müzik fikri bulunamadı."
+                    )
+                }
+
+                val url =
+                    URL(
+                        musicServerUrl
+                    )
+
+                connection =
+                    url.openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    60_000
+
+                connection.readTimeout =
+                    15 * 60 * 1000
+
+                connection.doOutput =
+                    true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "audio/mpeg, application/json"
+                )
+
+                val json =
+                    """{"prompt":"${jsonEscape(cleanPrompt)}","duration":$musicDurationSeconds}"""
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+
+                    output.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                if (
+                    responseCode !in 200..299
+                ) {
+
+                    val errorText =
+                        try {
+
+                            connection
+                                .errorStream
+                                ?.bufferedReader()
+                                ?.use {
+                                    it.readText()
+                                }
+                                ?: "Müzik sunucu hatası"
+
+                        } catch (
+                            _: Exception
+                        ) {
+
+                            "Müzik sunucu hatası"
+                        }
+
+                    throw Exception(
+                        "NOVA müzik oluşturulamadı: $errorText"
+                    )
+                }
+
+                val audioFile =
+                    File(
+                        cacheDir,
+                        "nova_generated.mp3"
+                    )
+
+                connection
+                    .inputStream
+                    .use { input ->
+
+                        BufferedInputStream(
+                            input
+                        ).use {
+                            bufferedInput ->
+
+                            FileOutputStream(
+                                audioFile
+                            ).use { output ->
+
+                                val buffer =
+                                    ByteArray(
+                                        16 * 1024
+                                    )
+
+                                var count: Int
+
+                                while (
+                                    bufferedInput
+                                        .read(buffer)
+                                        .also {
+                                            count = it
+                                        } != -1
+                                ) {
+
+                                    output.write(
+                                        buffer,
+                                        0,
+                                        count
+                                    )
+                                }
+
+                                output.flush()
+                            }
+                        }
+                    }
+
+                if (
+                    !audioFile.exists() ||
+                    audioFile.length() <= 0
+                ) {
+
+                    throw Exception(
+                        "NOVA boş MP3 dosyası gönderdi."
+                    )
+                }
+
+                generatedAudioFile =
+                    audioFile
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "🎵 NOVA müziği hazır!\n" +
+                            "Şimdi görüntü ve müzik birleştiriliyor...",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+                mergeVideoWithAudio(
+                    wanVideoFile,
+                    audioFile
+                )
+
+            } catch (
+                e: Exception
+            ) {
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "Otomatik müzik hatası:\n${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } finally {
+
+                connection?.disconnect()
+            }
+
+        }.start()
+    }
+
+    // =========================================================
     // MUSIC PLAY
     // =========================================================
 
@@ -1140,10 +1357,6 @@ class MainActivity : Activity() {
 
         scroll.addView(
             root
-        )
-
-        setContentView(
-            scroll
         )
 
         // -----------------------------------------------------
@@ -1609,1674 +1822,4 @@ class MainActivity : Activity() {
         root.addView(
             styleTitle,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(45)
-            )
-        )
-
-        val styles =
-            arrayOf(
-                "Sinematik",
-                "Duygusal",
-                "Enerjik",
-                "Romantik",
-                "Karanlık",
-                "Neon",
-                "Doğa",
-                "Konser"
-            )
-
-        val styleSpinner =
-            Spinner(this)
-
-        val styleAdapter =
-            ArrayAdapter(
-                this,
-                android.R.layout.simple_spinner_dropdown_item,
-                styles
-            )
-
-        styleSpinner.adapter =
-            styleAdapter
-
-        root.addView(
-            styleSpinner,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(55)
-            )
-        )
-
-        // -----------------------------------------------------
-        // OLD VIDEO DURATION
-        // -----------------------------------------------------
-
-        val durationTitle =
-            TextView(this)
-
-        durationTitle.text =
-            "VİDEO SÜRESİ"
-
-        durationTitle.textSize =
-            17f
-
-        durationTitle.setTextColor(
-            Color.WHITE
-        )
-
-        durationTitle.setTypeface(
-            null,
-            Typeface.BOLD
-        )
-
-        root.addView(
-            durationTitle,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(45)
-            )
-        )
-
-        val durations =
-            arrayOf(
-                "30 saniye",
-                "60 saniye",
-                "90 saniye",
-                "120 saniye",
-                "180 saniye"
-            )
-
-        val durationSpinner =
-            Spinner(this)
-
-        val durationAdapter =
-            ArrayAdapter(
-                this,
-                android.R.layout.simple_spinner_dropdown_item,
-                durations
-            )
-
-        durationSpinner.adapter =
-            durationAdapter
-
-        root.addView(
-            durationSpinner,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(55)
-            )
-        )
-
-        // -----------------------------------------------------
-        // ORIENTATION
-        // -----------------------------------------------------
-
-        val orientationTitle =
-            TextView(this)
-
-        orientationTitle.text =
-            "VİDEO ORYANTASYONU"
-
-        orientationTitle.textSize =
-            17f
-
-        orientationTitle.setTextColor(
-            Color.WHITE
-        )
-
-        orientationTitle.setTypeface(
-            null,
-            Typeface.BOLD
-        )
-
-        root.addView(
-            orientationTitle,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(45)
-            )
-        )
-
-        val orientationGroup =
-            RadioGroup(this)
-
-        orientationGroup.orientation =
-            RadioGroup.VERTICAL
-
-        val radio916 =
-            RadioButton(this)
-
-        radio916.text =
-            "9:16 - Dikey"
-
-        radio916.setTextColor(
-            Color.WHITE
-        )
-
-        radio916.isChecked =
-            true
-
-        orientationGroup.addView(
-            radio916
-        )
-
-        val radio169 =
-            RadioButton(this)
-
-        radio169.text =
-            "16:9 - Yatay"
-
-        radio169.setTextColor(
-            Color.WHITE
-        )
-
-        orientationGroup.addView(
-            radio169
-        )
-
-        val radio11 =
-            RadioButton(this)
-
-        radio11.text =
-            "1:1 - Kare"
-
-        radio11.setTextColor(
-            Color.WHITE
-        )
-
-        orientationGroup.addView(
-            radio11
-        )
-
-        root.addView(
-            orientationGroup,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(150)
-            )
-        )
-
-        // -----------------------------------------------------
-        // DESCRIPTION
-        // -----------------------------------------------------
-
-        val descriptionTitle =
-            TextView(this)
-
-        descriptionTitle.text =
-            "GÖRSEL AÇIKLAMA"
-
-        descriptionTitle.textSize =
-            17f
-
-        descriptionTitle.setTextColor(
-            Color.WHITE
-        )
-
-        descriptionTitle.setTypeface(
-            null,
-            Typeface.BOLD
-        )
-
-        root.addView(
-            descriptionTitle,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(45)
-            )
-        )
-
-        val descriptionEdit =
-            EditText(this)
-
-        descriptionEdit.hint =
-            "Örn: gece şehri, neon ışıklar, yağmur..."
-
-        descriptionEdit.setHintTextColor(
-            Color.GRAY
-        )
-
-        descriptionEdit.setTextColor(
-            Color.WHITE
-        )
-
-        descriptionEdit.setBackgroundColor(
-            Color.DKGRAY
-        )
-
-        root.addView(
-            descriptionEdit,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(100)
-            )
-        )
-
-        // -----------------------------------------------------
-        // OLD VIDEO BUTTON
-        // -----------------------------------------------------
-
-        val createVideoButton =
-            Button(this)
-
-        createVideoButton.text =
-            "🎬 VİDEOYU OLUŞTUR"
-
-        createVideoButton.setOnClickListener {
-
-            val lyrics =
-                lyricsEdit
-                    .text
-                    .toString()
-                    .trim()
-
-            if (
-                lyrics.isEmpty()
-            ) {
-
-                Toast.makeText(
-                    this,
-                    "Önce şarkı sözlerini yaz.",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                return@setOnClickListener
-            }
-
-            val style =
-                styleSpinner
-                    .selectedItem
-                    .toString()
-
-            val durationText =
-                durationSpinner
-                    .selectedItem
-                    .toString()
-
-            val duration =
-                durationText
-                    .replace(
-                        " saniye",
-                        ""
-                    )
-                    .toIntOrNull()
-                    ?: 60
-
-            val orientation =
-                when {
-
-                    radio169.isChecked ->
-                        "16:9"
-
-                    radio11.isChecked ->
-                        "1:1"
-
-                    else ->
-                        "9:16"
-                }
-
-            val visualDescription =
-                descriptionEdit
-                    .text
-                    .toString()
-                    .trim()
-
-            prepareVideoOnServer(
-                lyrics,
-                style,
-                duration,
-                orientation,
-                visualDescription
-            )
-        }
-
-        root.addView(
-            createVideoButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(65)
-            )
-        )
-
-        // -----------------------------------------------------
-        // PREVIEW
-        // -----------------------------------------------------
-
-        val previewTitle =
-            TextView(this)
-
-        previewTitle.text =
-            "🎞️ VİDEO ÖNİZLEME"
-
-        previewTitle.textSize =
-            18f
-
-        previewTitle.setTextColor(
-            Color.WHITE
-        )
-
-        previewTitle.setTypeface(
-            null,
-            Typeface.BOLD
-        )
-
-        root.addView(
-            previewTitle,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(50)
-            )
-        )
-
-        val preview =
-            VideoView(this)
-
-        videoPreview =
-            preview
-
-        preview.setBackgroundColor(
-            Color.BLACK
-        )
-
-        val mediaController =
-            MediaController(this)
-
-        mediaController.setAnchorView(
-            preview
-        )
-
-        preview.setMediaController(
-            mediaController
-        )
-
-        root.addView(
-            preview,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(420)
-            )
-        )
-
-        // -----------------------------------------------------
-        // SAVE VIDEO
-        // -----------------------------------------------------
-
-        val saveVideoButton =
-            Button(this)
-
-        saveVideoButton.text =
-            "💾 VİDEOYU TELEFONA KAYDET"
-
-        saveVideoButton.setOnClickListener {
-            saveVideoToPhone()
-        }
-
-        root.addView(
-            saveVideoButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(60)
-            )
-        )
-
-        // -----------------------------------------------------
-        // BACK
-        // -----------------------------------------------------
-
-        val backButton =
-            Button(this)
-
-        backButton.text =
-            "⬅️ ANA EKRANA DÖN"
-
-        backButton.setOnClickListener {
-            showMainScreen()
-        }
-
-        root.addView(
-            backButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(60)
-            )
-        )
-    }
-
-    // =========================================================
-    // FOTOĞRAF SEÇİLDİ
-    // =========================================================
-
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
-
-        super.onActivityResult(
-            requestCode,
-            resultCode,
-            data
-        )
-
-        if (
-            requestCode !=
-            PICK_ARTIST_IMAGE
-        ) {
-            return
-        }
-
-        if (
-            resultCode !=
-            RESULT_OK
-        ) {
-
-            Toast.makeText(
-                this,
-                "Fotoğraf seçilmedi.",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            return
-        }
-
-        val uri =
-            data?.data
-
-        if (uri == null) {
-
-            Toast.makeText(
-                this,
-                "Fotoğraf alınamadı.",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            return
-        }
-
-        Thread {
-
-            try {
-
-                val input =
-                    contentResolver
-                        .openInputStream(uri)
-
-                if (input == null) {
-
-                    throw Exception(
-                        "Fotoğraf açılamadı."
-                    )
-                }
-
-                input.use {
-
-                    val originalBitmap =
-                        BitmapFactory.decodeStream(
-                            it
-                        )
-
-                    if (
-                        originalBitmap == null
-                    ) {
-
-                        throw Exception(
-                            "Fotoğraf okunamadı."
-                        )
-                    }
-
-                    // -------------------------------------------------
-                    // WAN için fotoğrafı küçült
-                    // -------------------------------------------------
-
-                    val maxDimension =
-                        1280
-
-                    val width =
-                        originalBitmap.width
-
-                    val height =
-                        originalBitmap.height
-
-                    val scale =
-                        if (
-                            width > maxDimension ||
-                            height > maxDimension
-                        ) {
-
-                            minOf(
-                                maxDimension
-                                    .toFloat()
-                                    / width.toFloat(),
-
-                                maxDimension
-                                    .toFloat()
-                                    / height.toFloat()
-                            )
-
-                        } else {
-
-                            1f
-                        }
-
-                    val newWidth =
-                        (
-                            width * scale
-                            ).toInt()
-
-                    val newHeight =
-                        (
-                            height * scale
-                            ).toInt()
-
-                    val bitmap =
-                        if (
-                            scale != 1f
-                        ) {
-
-                            Bitmap.createScaledBitmap(
-                                originalBitmap,
-                                newWidth,
-                                newHeight,
-                                true
-                            )
-
-                        } else {
-
-                            originalBitmap
-                        }
-
-                    val outputStream =
-                        ByteArrayOutputStream()
-
-                    bitmap.compress(
-                        Bitmap.CompressFormat.JPEG,
-                        85,
-                        outputStream
-                    )
-
-                    if (
-                        bitmap != originalBitmap
-                    ) {
-                        bitmap.recycle()
-                    }
-
-                    if (
-                        originalBitmap != bitmap
-                    ) {
-                        originalBitmap.recycle()
-                    }
-
-                    val imageBytes =
-                        outputStream.toByteArray()
-
-                    outputStream.close()
-
-                    val base64 =
-                        Base64.encodeToString(
-                            imageBytes,
-                            Base64.NO_WRAP
-                        )
-
-                    selectedArtistImageBase64 =
-                        base64
-
-                    selectedArtistImageMimeType =
-                        "image/jpeg"
-
-                    runOnUiThread {
-
-                        Toast.makeText(
-                            this,
-                            "📷 Sanatçı fotoğrafı hazır.\nŞimdi WAN 2.2 butonuna bas.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-
-            } catch (
-                e: Exception
-            ) {
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "Fotoğraf hatası:\n${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-
-        }.start()
-    }
-
-    // =========================================================
-    // WAN 2.2 VIDEO
-    // =========================================================
-
-    private fun generateWanVideo(
-        imageBase64: String,
-        imageMimeType: String,
-        prompt: String,
-        duration: Double
-    ) {
-
-        Toast.makeText(
-            this,
-            "🤖 WAN 2.2 çalışıyor...\n" +
-                "Fotoğraf hareketlendiriliyor. Lütfen bekle.",
-            Toast.LENGTH_LONG
-        ).show()
-
-        Thread {
-
-            var connection:
-                    HttpURLConnection? = null
-
-            try {
-
-                val url =
-                    URL(
-                        wanVideoServerUrl
-                    )
-
-                connection =
-                    url.openConnection()
-                            as HttpURLConnection
-
-                connection.requestMethod =
-                    "POST"
-
-                connection.connectTimeout =
-                    60_000
-
-                connection.readTimeout =
-                    15 * 60 * 1000
-
-                connection.doOutput =
-                    true
-
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json; charset=UTF-8"
-                )
-
-                connection.setRequestProperty(
-                    "Accept",
-                    "video/mp4, application/json"
-                )
-
-                val json =
-                    """
-                    {
-                      "imageBase64":"${jsonEscape(imageBase64)}",
-                      "imageMimeType":"${jsonEscape(imageMimeType)}",
-                      "prompt":"${jsonEscape(prompt)}",
-                      "duration":$duration
-                    }
-                    """.trimIndent()
-
-                connection.outputStream.use { output ->
-
-                    output.write(
-                        json.toByteArray(
-                            Charsets.UTF_8
-                        )
-                    )
-
-                    output.flush()
-                }
-
-                val responseCode =
-                    connection.responseCode
-
-                if (
-                    responseCode !in 200..299
-                ) {
-
-                    val errorText =
-                        try {
-
-                            connection
-                                .errorStream
-                                ?.bufferedReader()
-                                ?.use {
-                                    it.readText()
-                                }
-                                ?: "WAN sunucu hatası"
-
-                        } catch (
-                            _: Exception
-                        ) {
-
-                            "WAN sunucu hatası"
-                        }
-
-                    runOnUiThread {
-
-                        Toast.makeText(
-                            this,
-                            "WAN video oluşturulamadı:\n$errorText",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    return@Thread
-                }
-
-                // -------------------------------------------------
-                // WAN MP4 dosyasını cache'e kaydet
-                // -------------------------------------------------
-
-                val wanVideoFile =
-                    File(
-                        cacheDir,
-                        "nova_wan_video.mp4"
-                    )
-
-                connection
-                    .inputStream
-                    .use { input ->
-
-                        BufferedInputStream(
-                            input
-                        ).use {
-                            bufferedInput ->
-
-                            FileOutputStream(
-                                wanVideoFile
-                            ).use { output ->
-
-                                val buffer =
-                                    ByteArray(
-                                        16 * 1024
-                                    )
-
-                                var count: Int
-
-                                while (
-                                    bufferedInput
-                                        .read(buffer)
-                                        .also {
-                                            count = it
-                                        } != -1
-                                ) {
-
-                                    output.write(
-                                        buffer,
-                                        0,
-                                        count
-                                    )
-                                }
-
-                                output.flush()
-                            }
-                        }
-                    }
-
-                if (
-                    !wanVideoFile.exists() ||
-                    wanVideoFile.length() <= 0
-                ) {
-
-                    throw Exception(
-                        "WAN boş video dosyası gönderdi."
-                    )
-                }
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "🎬 WAN videosu hazır.\nŞimdi müzik kontrol ediliyor...",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-                // -------------------------------------------------
-                // MÜZİK KONTROLÜ
-                // -------------------------------------------------
-
-                val audioFile =
-                    generatedAudioFile
-
-                if (
-                    audioFile == null ||
-                    !audioFile.exists() ||
-                    audioFile.length() <= 0
-                ) {
-
-                    generatedVideoFile =
-                        wanVideoFile
-
-                    runOnUiThread {
-
-                        showVideoFile(
-                            wanVideoFile
-                        )
-
-                        Toast.makeText(
-                            this,
-                            "⚠️ WAN videosu hazır fakat NOVA müziği bulunamadı.\n" +
-                                "Bu nedenle yalnızca sessiz video gösteriliyor.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    return@Thread
-                }
-
-                // -------------------------------------------------
-                // VIDEO + SES BİRLEŞTİR
-                // -------------------------------------------------
-
-                mergeVideoWithAudio(
-                    wanVideoFile,
-                    audioFile
-                )
-
-            } catch (
-                e: Exception
-            ) {
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "WAN video hatası:\n${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } finally {
-
-                connection?.disconnect()
-            }
-
-        }.start()
-    }
-
-    // =========================================================
-    // VIDEO + AUDIO MERGE
-    // =========================================================
-
-    private fun mergeVideoWithAudio(
-        videoFile: File,
-        audioFile: File
-    ) {
-
-        runOnUiThread {
-
-            Toast.makeText(
-                this,
-                "🎵 + 🎬 Görüntü ve müzik birleştiriliyor...\n" +
-                    "Lütfen bekle.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        Thread {
-
-            var connection:
-                    HttpURLConnection? = null
-
-            try {
-
-                if (
-                    !videoFile.exists() ||
-                    videoFile.length() <= 0
-                ) {
-
-                    throw Exception(
-                        "Birleştirme için video dosyası bulunamadı."
-                    )
-                }
-
-                if (
-                    !audioFile.exists() ||
-                    audioFile.length() <= 0
-                ) {
-
-                    throw Exception(
-                        "Birleştirme için müzik dosyası bulunamadı."
-                    )
-                }
-
-                // -------------------------------------------------
-                // Base64
-                // -------------------------------------------------
-
-                val videoBytes =
-                    videoFile.readBytes()
-
-                val audioBytes =
-                    audioFile.readBytes()
-
-                val videoBase64 =
-                    Base64.encodeToString(
-                        videoBytes,
-                        Base64.NO_WRAP
-                    )
-
-                val audioBase64 =
-                    Base64.encodeToString(
-                        audioBytes,
-                        Base64.NO_WRAP
-                    )
-
-                // -------------------------------------------------
-                // Render
-                // -------------------------------------------------
-
-                val url =
-                    URL(
-                        mergeVideoAudioServerUrl
-                    )
-
-                connection =
-                    url.openConnection()
-                            as HttpURLConnection
-
-                connection.requestMethod =
-                    "POST"
-
-                connection.connectTimeout =
-                    60_000
-
-                connection.readTimeout =
-                    15 * 60 * 1000
-
-                connection.doOutput =
-                    true
-
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json; charset=UTF-8"
-                )
-
-                connection.setRequestProperty(
-                    "Accept",
-                    "video/mp4, application/json"
-                )
-
-                val json =
-                    """
-                    {
-                      "videoBase64":"${jsonEscape(videoBase64)}",
-                      "audioBase64":"${jsonEscape(audioBase64)}",
-                      "videoMimeType":"video/mp4",
-                      "audioMimeType":"audio/mpeg"
-                    }
-                    """.trimIndent()
-
-                connection.outputStream.use { output ->
-
-                    output.write(
-                        json.toByteArray(
-                            Charsets.UTF_8
-                        )
-                    )
-
-                    output.flush()
-                }
-
-                val responseCode =
-                    connection.responseCode
-
-                if (
-                    responseCode !in 200..299
-                ) {
-
-                    val errorText =
-                        try {
-
-                            connection
-                                .errorStream
-                                ?.bufferedReader()
-                                ?.use {
-                                    it.readText()
-                                }
-                                ?: "Video + ses sunucu hatası"
-
-                        } catch (
-                            _: Exception
-                        ) {
-
-                            "Video + ses sunucu hatası"
-                        }
-
-                    runOnUiThread {
-
-                        Toast.makeText(
-                            this,
-                            "🎵🎬 Birleştirme başarısız:\n$errorText",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    return@Thread
-                }
-
-                // -------------------------------------------------
-                // SESLİ MP4
-                // -------------------------------------------------
-
-                val finalVideoFile =
-                    File(
-                        cacheDir,
-                        "nova_music_video.mp4"
-                    )
-
-                connection
-                    .inputStream
-                    .use { input ->
-
-                        BufferedInputStream(
-                            input
-                        ).use {
-                            bufferedInput ->
-
-                            FileOutputStream(
-                                finalVideoFile
-                            ).use { output ->
-
-                                val buffer =
-                                    ByteArray(
-                                        16 * 1024
-                                    )
-
-                                var count: Int
-
-                                while (
-                                    bufferedInput
-                                        .read(buffer)
-                                        .also {
-                                            count = it
-                                        } != -1
-                                ) {
-
-                                    output.write(
-                                        buffer,
-                                        0,
-                                        count
-                                    )
-                                }
-
-                                output.flush()
-                            }
-                        }
-                    }
-
-                if (
-                    !finalVideoFile.exists() ||
-                    finalVideoFile.length() <= 0
-                ) {
-
-                    throw Exception(
-                        "Render boş sesli video gönderdi."
-                    )
-                }
-
-                generatedVideoFile =
-                    finalVideoFile
-
-                runOnUiThread {
-
-                    showVideoFile(
-                        finalVideoFile
-                    )
-
-                    Toast.makeText(
-                        this,
-                        "🎬🔊 NOVA MÜZİK KLİBİ HAZIR!\n" +
-                            "Görüntü ve ses birleştirildi.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } catch (
-                e: Exception
-            ) {
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "Video + ses hatası:\n${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } finally {
-
-                connection?.disconnect()
-            }
-
-        }.start()
-    }
-
-    // =========================================================
-    // VIDEO GÖSTER
-    // =========================================================
-
-    private fun showVideoFile(
-        videoFile: File
-    ) {
-
-        val preview =
-            videoPreview
-
-        if (
-            preview == null
-        ) {
-
-            return
-        }
-
-        try {
-
-            val controller =
-                MediaController(
-                    this
-                )
-
-            controller.setAnchorView(
-                preview
-            )
-
-            preview.setMediaController(
-                controller
-            )
-
-            preview.setVideoURI(
-                Uri.fromFile(
-                    videoFile
-                )
-            )
-
-            preview.setOnPreparedListener {
-                it.isLooping = false
-            }
-
-            preview.setOnCompletionListener {
-
-                Toast.makeText(
-                    this,
-                    "🎬 Video tamamlandı.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-
-            preview.start()
-
-        } catch (
-            e: Exception
-        ) {
-
-            Toast.makeText(
-                this,
-                "Video önizleme hatası:\n${e.message}",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    // =========================================================
-    // OLD PREPARE VIDEO
-    // =========================================================
-
-    private fun prepareVideoOnServer(
-        lyrics: String,
-        style: String,
-        duration: Int,
-        orientation: String,
-        visualDescription: String
-    ) {
-
-        Toast.makeText(
-            this,
-            "🎬 Video hazırlanıyor...\nBu işlem birkaç dakika sürebilir.",
-            Toast.LENGTH_LONG
-        ).show()
-
-        Thread {
-
-            var connection:
-                    HttpURLConnection? = null
-
-            try {
-
-                val url =
-                    URL(
-                        videoServerUrl
-                    )
-
-                connection =
-                    url.openConnection()
-                            as HttpURLConnection
-
-                connection.requestMethod =
-                    "POST"
-
-                connection.connectTimeout =
-                    60_000
-
-                connection.readTimeout =
-                    10 * 60 * 1000
-
-                connection.doOutput =
-                    true
-
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json; charset=UTF-8"
-                )
-
-                connection.setRequestProperty(
-                    "Accept",
-                    "video/mp4, application/json"
-                )
-
-                val json =
-                    """
-                    {
-                      "lyrics":"${jsonEscape(lyrics)}",
-                      "style":"${jsonEscape(style)}",
-                      "duration":$duration,
-                      "orientation":"${jsonEscape(orientation)}",
-                      "visualDescription":"${jsonEscape(visualDescription)}"
-                    }
-                    """.trimIndent()
-
-                connection.outputStream.use { output ->
-
-                    output.write(
-                        json.toByteArray(
-                            Charsets.UTF_8
-                        )
-                    )
-
-                    output.flush()
-                }
-
-                val responseCode =
-                    connection.responseCode
-
-                if (
-                    responseCode !in 200..299
-                ) {
-
-                    val errorText =
-                        try {
-
-                            connection
-                                .errorStream
-                                ?.bufferedReader()
-                                ?.use {
-                                    it.readText()
-                                }
-                                ?: "Render sunucu hatası"
-
-                        } catch (
-                            _: Exception
-                        ) {
-
-                            "Render sunucu hatası"
-                        }
-
-                    runOnUiThread {
-
-                        Toast.makeText(
-                            this,
-                            "Video oluşturulamadı:\n$errorText",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    return@Thread
-                }
-
-                val videoFile =
-                    File(
-                        cacheDir,
-                        "nova_generated_video.mp4"
-                    )
-
-                connection
-                    .inputStream
-                    .use { input ->
-
-                        BufferedInputStream(
-                            input
-                        ).use {
-                            bufferedInput ->
-
-                            FileOutputStream(
-                                videoFile
-                            ).use { output ->
-
-                                val buffer =
-                                    ByteArray(
-                                        16 * 1024
-                                    )
-
-                                var count: Int
-
-                                while (
-                                    bufferedInput
-                                        .read(buffer)
-                                        .also {
-                                            count = it
-                                        } != -1
-                                ) {
-
-                                    output.write(
-                                        buffer,
-                                        0,
-                                        count
-                                    )
-                                }
-
-                                output.flush()
-                            }
-                        }
-                    }
-
-                if (
-                    !videoFile.exists() ||
-                    videoFile.length() <= 0
-                ) {
-
-                    throw Exception(
-                        "Render boş video dosyası gönderdi."
-                    )
-                }
-
-                generatedVideoFile =
-                    videoFile
-
-                runOnUiThread {
-
-                    showVideoFile(
-                        videoFile
-                    )
-
-                    Toast.makeText(
-                        this,
-                        "🎬 Video hazır!",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } catch (
-                e: Exception
-            ) {
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "Video hatası:\n${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } finally {
-
-                connection?.disconnect()
-            }
-
-        }.start()
-    }
-
-    // =========================================================
-    // SAVE VIDEO
-    // =========================================================
-
-    private fun saveVideoToPhone() {
-
-        val sourceFile =
-            generatedVideoFile
-
-        if (
-            sourceFile == null ||
-            !sourceFile.exists()
-        ) {
-
-            Toast.makeText(
-                this,
-                "Önce video oluştur.",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            return
-        }
-
-        try {
-
-            val resolver =
-                contentResolver
-
-            val values =
-                ContentValues().apply {
-
-                    put(
-                        MediaStore.MediaColumns.DISPLAY_NAME,
-                        "NOVA_Music_Video_${System.currentTimeMillis()}.mp4"
-                    )
-
-                    put(
-                        MediaStore.MediaColumns.MIME_TYPE,
-                        "video/mp4"
-                    )
-
-                    if (
-                        Build.VERSION.SDK_INT >=
-                        Build.VERSION_CODES.Q
-                    ) {
-
-                        put(
-                            MediaStore.MediaColumns.RELATIVE_PATH,
-                            "Movies/NOVA"
-                        )
-
-                        put(
-                            MediaStore.MediaColumns.IS_PENDING,
-                            1
-                        )
-                    }
-                }
-
-            val uri =
-                resolver.insert(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    values
-                )
-
-            if (
-                uri == null
-            ) {
-
-                throw Exception(
-                    "Telefon depolamasında video oluşturulamadı."
-                )
-            }
-
-            resolver
-                .openOutputStream(uri)
-                .use { output ->
-
-                    if (
-                        output == null
-                    ) {
-
-                        throw Exception(
-                            "Video yazma akışı açılamadı."
-                        )
-                    }
-
-                    sourceFile
-                        .inputStream()
-                        .use { input ->
-
-                            val buffer =
-                                ByteArray(
-                                    16 * 1024
-                                )
-
-                            var count: Int
-
-                            while (
-                                input
-                                    .read(buffer)
-                                    .also {
-                                        count = it
-                                    } != -1
-                            ) {
-
-                                output.write(
-                                    buffer,
-                                    0,
-                                    count
-                                )
-                            }
-                        }
-                }
-
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.Q
-            ) {
-
-                val finishValues =
-                    ContentValues().apply {
-
-                        put(
-                            MediaStore.MediaColumns.IS_PENDING,
-                            0
-                        )
-                    }
-
-                resolver.update(
-                    uri,
-                    finishValues,
-                    null,
-                    null
-                )
-            }
-
-            Toast.makeText(
-                this,
-                "💾 Sesli müzik klibi telefona kaydedildi.",
-                Toast.LENGTH_LONG
-            ).show()
-
-        } catch (
-            e: Exception
-        ) {
-
-            Toast.makeText(
-                this,
-                "Video kaydetme hatası:\n${e.message}",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    // =========================================================
-    // JSON ESCAPE
-    // =========================================================
-
-    private fun jsonEscape(
-        text: String
-    ): String {
-
-        return text
-            .replace(
-                "\\",
-                "\\\\"
-            )
-            .replace(
-                "\"",
-                "\\\""
-            )
-            .replace(
-                "\n",
-                "\\n"
-            )
-            .replace(
-                "\r",
-                "\\r"
-            )
-            .replace(
-                "\t",
-                "\\t"
-            )
-    }
-
-    // =========================================================
-    // DP
-    // =========================================================
-
-    private fun dp(
-        value: Int
-    ): Int {
-
-        return (
-            value *
-                resources
-                    .displayMetrics
-                    .density
-            ).toInt()
-    }
-
-    // =========================================================
-    // DESTROY
-    // =========================================================
-
-    override fun onDestroy() {
-
-        try {
-            mediaPlayer?.release()
-        } catch (
-            _: Exception
-        ) {
-        }
-
-        mediaPlayer =
-            null
-
-        try {
-            lyricsWebView?.destroy()
-        } catch (
-            _: Exception
-        ) {
-        }
-
-        lyricsWebView =
-            null
-
-        super.onDestroy()
-    }
-
-    // =========================================================
-    // BACK
-    // =========================================================
-
-    override fun onBackPressed() {
-
-        if (
-            videoRoot != null
-        ) {
-
-            videoRoot =
-                null
-
-            showMainScreen()
-
-            return
-        }
-
-        super.onBackPressed()
-    }
-}
+               
