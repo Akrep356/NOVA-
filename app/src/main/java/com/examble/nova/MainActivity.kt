@@ -2027,13 +2027,43 @@ class MainActivity : Activity() {
             ).show()
         }
 
+        
+
         root.addView(
             prepareVideoButton,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(65)
             )
+        )
+
         setContentView(scroll)
+    }
+
+    // =========================================================
+    // YARDIMCI FONKSİYONLAR
+    // =========================================================
+
+    private fun jsonEscape(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
+    override fun onDestroy() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+        lyricsWebView?.destroy()
+        lyricsWebView = null
+        super.onDestroy()
+    }
 }
 
 // =========================================================
