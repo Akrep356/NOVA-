@@ -1822,4 +1822,155 @@ class MainActivity : Activity() {
         root.addView(
             styleTitle,
             LinearLayout.LayoutParams(
-               
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val styles = arrayOf(
+            "Sinematik",
+            "Duygusal",
+            "Enerjik",
+            "Romantik",
+            "Karanlık",
+            "Neon",
+            "Doğa",
+            "Konser"
+        )
+
+        val styleSpinner = Spinner(this)
+
+        val styleAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            styles
+        )
+
+        styleSpinner.adapter = styleAdapter
+
+        root.addView(
+            styleSpinner,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        val orientationTitle = TextView(this)
+
+        orientationTitle.text = "📐 VİDEO YÖNÜ"
+        orientationTitle.textSize = 17f
+        orientationTitle.setTextColor(Color.WHITE)
+        orientationTitle.setTypeface(null, Typeface.BOLD)
+
+        root.addView(
+            orientationTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val orientations = arrayOf(
+            "Dikey 9:16",
+            "Yatay 16:9",
+            "Kare 1:1"
+        )
+
+        val orientationSpinner = Spinner(this)
+
+        val orientationAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            orientations
+        )
+
+        orientationSpinner.adapter = orientationAdapter
+
+        root.addView(
+            orientationSpinner,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        val durationTitle = TextView(this)
+
+        durationTitle.text = "⏱️ VİDEO SÜRESİ"
+        durationTitle.textSize = 17f
+        durationTitle.setTextColor(Color.WHITE)
+        durationTitle.setTypeface(null, Typeface.BOLD)
+
+        root.addView(
+            durationTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val videoDurations = arrayOf(
+            "15 saniye",
+            "30 saniye",
+            "60 saniye"
+        )
+
+        val durationSpinner = Spinner(this)
+
+        val durationAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            videoDurations
+        )
+
+        durationSpinner.adapter = durationAdapter
+        durationSpinner.setSelection(1)
+
+        root.addView(
+            durationSpinner,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(55)
+            )
+        )
+
+        val visualTitle = TextView(this)
+
+        visualTitle.text = "🎞️ KLİPTE GÖRÜNECEK SAHNELER"
+        visualTitle.textSize = 17f
+        visualTitle.setTextColor(Color.WHITE)
+        visualTitle.setTypeface(null, Typeface.BOLD)
+
+        root.addView(
+            visualTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(45)
+            )
+        )
+
+        val visualDescriptionEdit = EditText(this)
+
+        visualDescriptionEdit.hint =
+            "Örn: gece şehri, neon ışıklar, sahnede şarkı söyleyen sanatçı..."
+
+        visualDescriptionEdit.setHintTextColor(Color.GRAY)
+        visualDescriptionEdit.setTextColor(Color.WHITE)
+        visualDescriptionEdit.setBackgroundColor(Color.DKGRAY)
+        visualDescriptionEdit.gravity = Gravity.TOP
+
+        visualDescriptionEdit.setPadding(
+            dp(12),
+            dp(12),
+            dp(12),
+            dp(12)
+        )
+
+        root.addView(
+            visualDescriptionEdit,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(120)
+            )
+        )
