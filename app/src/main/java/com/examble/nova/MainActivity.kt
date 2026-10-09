@@ -1974,3 +1974,91 @@ class MainActivity : Activity() {
                 dp(120)
             )
         )
+
+        val prepareVideoButton = Button(this)
+
+        prepareVideoButton.text =
+            "🎬 VİDEO KLİBİNİ HAZIRLA"
+
+        prepareVideoButton.setOnClickListener {
+
+            val lyrics =
+                lyricsEdit.text.toString().trim()
+
+            val style =
+                styleSpinner.selectedItem.toString()
+
+            val duration =
+                when (
+                    durationSpinner.selectedItem.toString()
+                ) {
+                    "15 saniye" -> 15
+                    "30 saniye" -> 30
+                    "60 saniye" -> 60
+                    else -> 30
+                }
+
+            val orientation =
+                when (
+                    orientationSpinner.selectedItem.toString()
+                ) {
+                    "Yatay 16:9" -> "16:9"
+                    "Kare 1:1" -> "1:1"
+                    else -> "9:16"
+                }
+
+            val visualDescription =
+                visualDescriptionEdit.text.toString().trim()
+
+            if (lyrics.isEmpty()) {
+                Toast.makeText(
+                    this,
+                    "Önce şarkı sözlerini yaz.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@setOnClickListener
+            }
+
+            Toast.makeText(
+                this,
+                "Video ayarları hazır. Sunucu bağlantısını sonraki adımda ekleyeceğiz.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        root.addView(
+            prepareVideoButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(65)
+            )
+        setContentView(scroll)
+}
+
+// =========================================================
+// YARDIMCI FONKSİYONLAR
+// =========================================================
+
+private fun jsonEscape(value: String): String {
+    return value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+}
+
+private fun dp(value: Int): Int {
+    return (value * resources.displayMetrics.density).toInt()
+}
+
+override fun onDestroy() {
+    mediaPlayer?.release()
+    mediaPlayer = null
+    lyricsWebView?.destroy()
+    lyricsWebView = null
+    super.onDestroy()
+}
+
+}
