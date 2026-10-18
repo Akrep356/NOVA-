@@ -21,10 +21,8 @@ import android.media.MediaPlayer
 import android.util.Base64
 
 import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.io.ByteArrayOutputStream
 import org.json.JSONObject
 
 class MainActivity : Activity() {
@@ -63,6 +61,9 @@ class MainActivity : Activity() {
 
     private val PICK_ARTIST_IMAGE = 5001
 
+    private val bgColor = Color.rgb(9, 9, 13)
+    private val purpleColor = Color.rgb(121, 82, 255)
+
     // =====================================================
     // ACTIVITY
     // =====================================================
@@ -73,35 +74,225 @@ class MainActivity : Activity() {
     }
 
     // =====================================================
-    // MAIN SCREEN
+    // NOVA HOME SCREEN
     // =====================================================
 
     private fun showMainScreen() {
+        val scroll = ScrollView(this)
+        scroll.setBackgroundColor(bgColor)
+        scroll.isFillViewport = true
+
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(16), dp(16), dp(16), dp(24))
-        root.setBackgroundColor(Color.BLACK)
+        root.setPadding(dp(18), dp(14), dp(18), dp(24))
+        root.setBackgroundColor(bgColor)
 
-        val scroll = ScrollView(this)
         scroll.addView(root)
-        scroll.setBackgroundColor(Color.BLACK)
         setContentView(scroll)
 
-        val title = makeText("NOVA", 34f, true)
-        title.gravity = Gravity.CENTER
-        root.addView(title, fullHeight(70))
+        // HEADER
 
-        val subtitle = makeText(
-            "AI MUSIC VIDEO & ARTIST CREATOR",
-            13f,
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+
+        val logo = TextView(this)
+        logo.text = "✦"
+        logo.textSize = 34f
+        logo.gravity = Gravity.CENTER
+        logo.setTextColor(purpleColor)
+
+        header.addView(
+            logo,
+            LinearLayout.LayoutParams(dp(48), dp(58))
+        )
+
+        val brand = LinearLayout(this)
+        brand.orientation = LinearLayout.VERTICAL
+        brand.gravity = Gravity.CENTER_VERTICAL
+
+        brand.addView(
+            makeText("NOVA", 27f, true),
+            fullHeight(35)
+        )
+
+        val tagline = makeText(
+            "AI MUSIC · VIDEO · ARTIST",
+            10f,
             false
         )
-        subtitle.gravity = Gravity.CENTER
-        root.addView(subtitle, fullHeight(40))
+        tagline.setTextColor(Color.LTGRAY)
+        brand.addView(tagline, fullHeight(22))
+
+        header.addView(
+            brand,
+            LinearLayout.LayoutParams(0, dp(58), 1f)
+        )
+
+        val profile = makeButton("●")
+        profile.setTextColor(Color.rgb(205, 190, 255))
+        profile.setBackgroundColor(Color.rgb(30, 27, 42))
+        profile.setOnClickListener {
+            toast("Profil bölümü sonraki aşamada geliştirilecek.")
+        }
+
+        header.addView(
+            profile,
+            LinearLayout.LayoutParams(dp(48), dp(48))
+        )
+
+        root.addView(header, fullHeight(65))
+
+        // HERO AREA
+
+        val hero = LinearLayout(this)
+        hero.orientation = LinearLayout.VERTICAL
+        hero.setPadding(dp(20), dp(20), dp(20), dp(20))
+        hero.setBackgroundColor(Color.rgb(35, 27, 57))
+
+        val heroLabel = makeText(
+            "HAYALİNİ GERÇEĞE DÖNÜŞTÜR",
+            12f,
+            true
+        )
+        heroLabel.setTextColor(Color.rgb(194, 166, 255))
+        hero.addView(heroLabel, fullHeight(30))
+
+        val heroTitle = makeText(
+            "Kendi müziğini,\nkendi dünyanı yarat.",
+            27f,
+            true
+        )
+        heroTitle.setPadding(0, dp(4), 0, dp(4))
+        hero.addView(heroTitle, fullHeight(88))
+
+        val heroDescription = makeText(
+            "Şarkını üret, sanatçını canlandır ve klibini hazırla.",
+            14f,
+            false
+        )
+        heroDescription.setTextColor(Color.LTGRAY)
+        hero.addView(heroDescription, fullHeight(50))
+
+        val heroButtons = LinearLayout(this)
+        heroButtons.orientation = LinearLayout.HORIZONTAL
+
+        val heroMusic = makeButton("♫ Şarkı üret")
+        heroMusic.setTextColor(Color.WHITE)
+        heroMusic.setBackgroundColor(purpleColor)
+        heroMusic.setOnClickListener {
+            focusMusicPrompt()
+        }
+
+        heroButtons.addView(
+            heroMusic,
+            LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+                rightMargin = dp(5)
+            }
+        )
+
+        val heroVideo = makeButton("▶ Video üret")
+        heroVideo.setTextColor(Color.WHITE)
+        heroVideo.setBackgroundColor(Color.rgb(61, 55, 75))
+        heroVideo.setOnClickListener {
+            showVideoScreen()
+        }
+
+        heroButtons.addView(
+            heroVideo,
+            LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+                leftMargin = dp(5)
+            }
+        )
+
+        hero.addView(heroButtons, fullHeight(60))
 
         root.addView(
-            makeText("MÜZİK FİKRİN", 18f, true),
-            fullHeight(45)
+            hero,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(22)
+            }
+        )
+
+        // FEATURE CARDS
+
+        root.addView(
+            makeText("Neler oluşturabilirsin?", 21f, true),
+            fullHeight(48)
+        )
+
+        val row1 = LinearLayout(this)
+        row1.orientation = LinearLayout.HORIZONTAL
+
+        row1.addView(
+            homeCard(
+                "♫",
+                "Şarkı Oluştur",
+                "Yapay zekâyla müzik üret",
+                Color.rgb(7, 91, 75)
+            ) {
+                focusMusicPrompt()
+            },
+            cardParams()
+        )
+
+        row1.addView(
+            homeCard(
+                "▶",
+                "Video Oluştur",
+                "Şarkına klip hazırla",
+                Color.rgb(73, 26, 131)
+            ) {
+                showVideoScreen()
+            },
+            cardParams()
+        )
+
+        root.addView(row1, fullHeight(160))
+
+        val row2 = LinearLayout(this)
+        row2.orientation = LinearLayout.HORIZONTAL
+
+        row2.addView(
+            homeCard(
+                "◎",
+                "Sanatçını Canlandır",
+                "Fotoğraftan video üret",
+                Color.rgb(133, 37, 47)
+            ) {
+                showVideoScreen()
+            },
+            cardParams()
+        )
+
+        row2.addView(
+            homeCard(
+                "✎",
+                "Şarkı Sözleri",
+                "Kendi sözlerini oluştur",
+                Color.rgb(136, 64, 29)
+            ) {
+                showLyricsScreen()
+            },
+            cardParams()
+        )
+
+        root.addView(row2, fullHeight(160))
+
+        // MUSIC PROMPT
+
+        root.addView(
+            makeText("Müzik fikrin", 21f, true),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ).apply {
+                topMargin = dp(18)
+            }
         )
 
         val prompt = EditText(this)
@@ -109,34 +300,48 @@ class MainActivity : Activity() {
             "Türkçe pop, enerjik, romantik, kadın vokal..."
         prompt.setHintTextColor(Color.GRAY)
         prompt.setTextColor(Color.WHITE)
-        prompt.setBackgroundColor(Color.DKGRAY)
-        prompt.setPadding(dp(12), dp(12), dp(12), dp(12))
+        prompt.textSize = 15f
+        prompt.setBackgroundColor(Color.rgb(35, 35, 45))
+        prompt.setPadding(dp(14), dp(12), dp(14), dp(12))
+        prompt.minLines = 2
+        prompt.maxLines = 4
         mainPrompt = prompt
-        root.addView(prompt, fullHeight(110))
 
-        val lyricsButton = makeButton("✍️ SÖZ OLUŞTUR")
-        lyricsButton.setOnClickListener { showLyricsScreen() }
-        root.addView(lyricsButton, fullHeight(55))
+        root.addView(prompt, fullHeight(100))
 
-        val musicButton = makeButton("🎵 MÜZİK OLUŞTUR")
-        musicButton.setOnClickListener {
+        val generate = makeButton("♫ MÜZİĞİMİ OLUŞTUR")
+        generate.setTextColor(Color.WHITE)
+        generate.setBackgroundColor(purpleColor)
+        generate.setOnClickListener {
             val text = mainPrompt?.text?.toString()?.trim().orEmpty()
+
             if (text.isEmpty()) {
                 toast("Önce müzik fikrini yaz.")
             } else {
                 generateMusic(text)
             }
         }
-        root.addView(musicButton, fullHeight(60))
 
-        val controls = LinearLayout(this)
-        controls.orientation = LinearLayout.HORIZONTAL
+        root.addView(
+            generate,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(56)
+            ).apply {
+                topMargin = dp(10)
+            }
+        )
 
-        val play = makeButton("▶️ OYNAT")
+        // MUSIC CONTROLS
+
+        val playback = LinearLayout(this)
+        playback.orientation = LinearLayout.HORIZONTAL
+
+        val play = makeButton("▶ Oynat")
         play.setOnClickListener { playGeneratedMusic() }
-        controls.addView(play, weightedHeight(55))
+        playback.addView(play, weightedHeight(52))
 
-        val pause = makeButton("⏸️ DURAKLAT")
+        val pause = makeButton("Ⅱ Duraklat")
         pause.setOnClickListener {
             try {
                 if (mediaPlayer?.isPlaying == true) {
@@ -145,33 +350,162 @@ class MainActivity : Activity() {
             } catch (_: Exception) {
             }
         }
-        controls.addView(pause, weightedHeight(55))
+        playback.addView(pause, weightedHeight(52))
 
-        val stop = makeButton("⏹️ DURDUR")
+        val stop = makeButton("■ Durdur")
         stop.setOnClickListener { stopMusic() }
-        controls.addView(stop, weightedHeight(55))
+        playback.addView(stop, weightedHeight(52))
 
-        root.addView(controls, fullHeight(65))
+        root.addView(
+            playback,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(60)
+            ).apply {
+                topMargin = dp(6)
+            }
+        )
 
         val saveMusic = makeButton("💾 MP3'Ü TELEFONA KAYDET")
         saveMusic.setOnClickListener { saveMusicToPhone() }
-        root.addView(saveMusic, fullHeight(60))
+        root.addView(saveMusic, fullHeight(54))
 
-        val videoButton = makeButton("🎬 MÜZİK VİDEOSU OLUŞTUR")
-        videoButton.setOnClickListener { showVideoScreen() }
-        root.addView(videoButton, fullHeight(65))
+        // INSPIRATION
 
-        val info = makeText(
-            "\nNOVA hazır.\n\n" +
-                "Müzik: Render + Stable Audio\n" +
-                "Şarkı sözleri: Gemini destekli ekran\n" +
-                "Sanatçı animasyonu: WAN 2.2 sunucusu\n" +
-                "Video ve ses birleştirme: Render sunucusu",
-            13f,
-            false
+        root.addView(
+            makeText("İlhamını seç", 21f, true),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ).apply {
+                topMargin = dp(18)
+            }
         )
-        info.gravity = Gravity.CENTER
-        root.addView(info, fullHeight(150))
+
+        val inspiration = LinearLayout(this)
+        inspiration.orientation = LinearLayout.HORIZONTAL
+
+        val styles = arrayOf("Pop", "Rap", "Romantik", "Sinematik")
+
+        for (style in styles) {
+            val button = makeButton(style)
+            button.textSize = 12f
+            button.setOnClickListener {
+                val current =
+                    mainPrompt?.text?.toString()?.trim().orEmpty()
+
+                val newText = if (current.isEmpty()) {
+                    "$style tarzında bir şarkı"
+                } else {
+                    "$current, $style tarzında"
+                }
+
+                mainPrompt?.setText(newText)
+            }
+
+            inspiration.addView(button, weightedHeight(48))
+        }
+
+        root.addView(inspiration, fullHeight(58))
+
+        // BOTTOM NAVIGATION
+
+        val bottom = LinearLayout(this)
+        bottom.orientation = LinearLayout.HORIZONTAL
+        bottom.gravity = Gravity.CENTER
+        bottom.setPadding(0, dp(5), 0, dp(5))
+        bottom.setBackgroundColor(Color.rgb(24, 23, 30))
+
+        val home = makeButton("⌂")
+        home.textSize = 25f
+        home.setOnClickListener { showMainScreen() }
+        bottom.addView(home, weightedHeight(55))
+
+        val library = makeButton("▣")
+        library.textSize = 22f
+        library.setOnClickListener {
+            toast("Kütüphane bölümü henüz eklenmedi.")
+        }
+        bottom.addView(library, weightedHeight(55))
+
+        val create = makeButton("+")
+        create.textSize = 29f
+        create.setTextColor(Color.WHITE)
+        create.setBackgroundColor(purpleColor)
+        create.setOnClickListener {
+            focusMusicPrompt()
+        }
+        bottom.addView(create, weightedHeight(55))
+
+        val favorites = makeButton("☆")
+        favorites.textSize = 24f
+        favorites.setOnClickListener {
+            toast("Favoriler bölümü henüz eklenmedi.")
+        }
+        bottom.addView(favorites, weightedHeight(55))
+
+        val account = makeButton("♙")
+        account.textSize = 24f
+        account.setOnClickListener {
+            toast("Profil bölümü henüz eklenmedi.")
+        }
+        bottom.addView(account, weightedHeight(55))
+
+        root.addView(
+            bottom,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(65)
+            ).apply {
+                topMargin = dp(22)
+            }
+        )
+    }
+
+    private fun focusMusicPrompt() {
+        mainPrompt?.let {
+            it.requestFocus()
+            toast("Müzik fikrini aşağıdaki alana yaz.")
+        }
+    }
+
+    private fun cardParams(): LinearLayout.LayoutParams {
+        return LinearLayout.LayoutParams(
+            0,
+            dp(152),
+            1f
+        ).apply {
+            setMargins(dp(4), dp(4), dp(4), dp(4))
+        }
+    }
+
+    private fun homeCard(
+        symbol: String,
+        title: String,
+        description: String,
+        backgroundColor: Int,
+        action: () -> Unit
+    ): LinearLayout {
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.VERTICAL
+        card.gravity = Gravity.CENTER_VERTICAL
+        card.setPadding(dp(12), dp(10), dp(10), dp(10))
+        card.setBackgroundColor(backgroundColor)
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener { action() }
+
+        val icon = makeText(symbol, 28f, true)
+        card.addView(icon, fullHeight(42))
+
+        val heading = makeText(title, 15f, true)
+        card.addView(heading, fullHeight(43))
+
+        val detail = makeText(description, 12f, false)
+        detail.setTextColor(Color.rgb(235, 230, 245))
+        card.addView(detail, fullHeight(38))
+
+        return card
     }
 
     // =====================================================
@@ -220,10 +554,12 @@ class MainActivity : Activity() {
 
     private fun playGeneratedMusic() {
         val file = generatedAudioFile
+
         if (file == null || !file.exists()) {
             toast("Önce müzik oluştur.")
             return
         }
+
         playGeneratedMp3(file)
     }
 
@@ -246,6 +582,7 @@ class MainActivity : Activity() {
             mediaPlayer?.stop()
         } catch (_: Exception) {
         }
+
         mediaPlayer?.release()
         mediaPlayer = null
     }
@@ -288,6 +625,7 @@ class MainActivity : Activity() {
                 if (output == null) {
                     throw Exception("Dosya yazılamadı.")
                 }
+
                 source.inputStream().use { input ->
                     input.copyTo(output)
                 }
@@ -297,6 +635,7 @@ class MainActivity : Activity() {
                 val finish = ContentValues().apply {
                     put(MediaStore.MediaColumns.IS_PENDING, 0)
                 }
+
                 contentResolver.update(uri, finish, null, null)
             }
 
@@ -337,7 +676,7 @@ class MainActivity : Activity() {
             )
         )
 
-        val back = makeButton("⬅️ ANA EKRANA DÖN")
+        val back = makeButton("⬅ ANA EKRANA DÖN")
         back.setOnClickListener { showMainScreen() }
         root.addView(back, fullHeight(60))
 
@@ -349,10 +688,12 @@ class MainActivity : Activity() {
         fun generateMusic(lyrics: String) {
             runOnUiThread {
                 val clean = lyrics.trim()
+
                 if (clean.isEmpty()) {
                     toast("Sözler boş.")
                     return@runOnUiThread
                 }
+
                 showMainScreen()
                 mainPrompt?.setText(clean)
                 generateMusic(clean)
@@ -425,7 +766,7 @@ class MainActivity : Activity() {
         root.addView(wanPrompt, fullHeight(120))
 
         root.addView(
-            makeText("⏱️ WAN VİDEO SÜRESİ", 17f, true),
+            makeText("⏱ WAN VİDEO SÜRESİ", 17f, true),
             fullHeight(45)
         )
 
@@ -446,14 +787,13 @@ class MainActivity : Activity() {
             }
 
             val prompt = wanPrompt.text.toString().trim()
+
             if (prompt.isEmpty()) {
                 toast("Hareket promptu yaz.")
                 return@setOnClickListener
             }
 
-            val duration = when (
-                wanDuration.selectedItem.toString()
-            ) {
+            val duration = when (wanDuration.selectedItem.toString()) {
                 "3.5 saniye" -> 3.5
                 "4 saniye" -> 4.0
                 "5 saniye" -> 5.0
@@ -490,9 +830,11 @@ class MainActivity : Activity() {
         lyrics.setTextColor(Color.WHITE)
         lyrics.setBackgroundColor(Color.DKGRAY)
         lyrics.gravity = Gravity.TOP
+
         mainPrompt?.text?.toString()?.trim()?.let {
             if (it.isNotEmpty()) lyrics.setText(it)
         }
+
         root.addView(lyrics, fullHeight(130))
 
         root.addView(
@@ -521,7 +863,7 @@ class MainActivity : Activity() {
         root.addView(orientation, fullHeight(55))
 
         root.addView(
-            makeText("⏱️ VİDEO SÜRESİ", 17f, true),
+            makeText("⏱ VİDEO SÜRESİ", 17f, true),
             fullHeight(45)
         )
 
@@ -533,7 +875,7 @@ class MainActivity : Activity() {
         root.addView(duration, fullHeight(55))
 
         root.addView(
-            makeText("🎞️ KLİPTE GÖRÜNECEK SAHNELER", 17f, true),
+            makeText("🎞 KLİPTE GÖRÜNECEK SAHNELER", 17f, true),
             fullHeight(45)
         )
 
@@ -556,6 +898,7 @@ class MainActivity : Activity() {
             }
 
             val selectedStyle = style.selectedItem.toString()
+
             val selectedDuration = when (
                 duration.selectedItem.toString()
             ) {
@@ -582,7 +925,7 @@ class MainActivity : Activity() {
         }
         root.addView(prepare, fullHeight(65))
 
-        val preview = makeButton("▶️ OLUŞAN VİDEOYU OYNAT")
+        val preview = makeButton("▶ OLUŞAN VİDEOYU OYNAT")
         preview.setOnClickListener { playGeneratedVideo(root) }
         root.addView(preview, fullHeight(60))
 
@@ -590,7 +933,7 @@ class MainActivity : Activity() {
         saveVideo.setOnClickListener { saveVideoToPhone() }
         root.addView(saveVideo, fullHeight(60))
 
-        val back = makeButton("⬅️ ANA EKRANA DÖN")
+        val back = makeButton("⬅ ANA EKRANA DÖN")
         back.setOnClickListener { showMainScreen() }
         root.addView(back, fullHeight(60))
 
@@ -625,6 +968,7 @@ class MainActivity : Activity() {
                 }
 
                 val bytes = input.readBytes()
+
                 if (bytes.isEmpty()) {
                     throw Exception("Fotoğraf dosyası boş.")
                 }
@@ -682,8 +1026,8 @@ class MainActivity : Activity() {
                     toast("✅ Sanatçı videosu hazır.")
                 }
 
-                // Mevcut NOVA müziği varsa videoya ekle.
                 val audio = generatedAudioFile
+
                 if (audio != null && audio.exists()) {
                     mergeVideoWithAudio(file, audio)
                 }
@@ -711,6 +1055,7 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val json = JSONObject()
+
                 json.put(
                     "videoBase64",
                     Base64.encodeToString(
@@ -718,6 +1063,7 @@ class MainActivity : Activity() {
                         Base64.NO_WRAP
                     )
                 )
+
                 json.put(
                     "audioBase64",
                     Base64.encodeToString(
@@ -725,6 +1071,7 @@ class MainActivity : Activity() {
                         Base64.NO_WRAP
                     )
                 )
+
                 json.put("videoMimeType", "video/mp4")
                 json.put("audioMimeType", "audio/mpeg")
 
@@ -796,6 +1143,7 @@ class MainActivity : Activity() {
                 }
 
                 val audio = generatedAudioFile
+
                 if (audio != null && audio.exists()) {
                     mergeVideoWithAudio(file, audio)
                 }
@@ -835,7 +1183,7 @@ class MainActivity : Activity() {
         )
 
         videoView.setOnPreparedListener {
-            videoView.start()
+            it.start()
         }
     }
 
@@ -877,6 +1225,7 @@ class MainActivity : Activity() {
                 if (output == null) {
                     throw Exception("Video dosyasına yazılamadı.")
                 }
+
                 source.inputStream().use { input ->
                     input.copyTo(output)
                 }
@@ -886,6 +1235,7 @@ class MainActivity : Activity() {
                 val finish = ContentValues().apply {
                     put(MediaStore.MediaColumns.IS_PENDING, 0)
                 }
+
                 contentResolver.update(uri, finish, null, null)
             }
 
@@ -912,10 +1262,12 @@ class MainActivity : Activity() {
             connection.connectTimeout = 60_000
             connection.readTimeout = 15 * 60 * 1000
             connection.doOutput = true
+
             connection.setRequestProperty(
                 "Content-Type",
                 "application/json; charset=UTF-8"
             )
+
             connection.setRequestProperty("Accept", accept)
 
             connection.outputStream.use { output ->
@@ -924,6 +1276,7 @@ class MainActivity : Activity() {
             }
 
             val code = connection.responseCode
+
             val responseBytes = if (code in 200..299) {
                 connection.inputStream.use { it.readBytes() }
             } else {
@@ -938,18 +1291,19 @@ class MainActivity : Activity() {
 
             val contentType = connection.contentType.orEmpty()
 
-            // Sunucu JSON hata yanıtını 200 ile döndürürse
-            // MP4/MP3 dosyası gibi kaydetmeyelim.
             if (contentType.contains("application/json", true)) {
                 val body = String(responseBytes, Charsets.UTF_8)
+
                 val error = try {
-                    JSONObject(body).optString(
+                    val response = JSONObject(body)
+                    response.optString(
                         "error",
-                        JSONObject(body).optString("message", body)
+                        response.optString("message", body)
                     )
                 } catch (_: Exception) {
                     body
                 }
+
                 throw Exception(error)
             }
 
@@ -976,7 +1330,10 @@ class MainActivity : Activity() {
             this.text = text
             textSize = size
             setTextColor(Color.WHITE)
-            if (bold) setTypeface(null, Typeface.BOLD)
+
+            if (bold) {
+                setTypeface(null, Typeface.BOLD)
+            }
         }
     }
 
@@ -1002,7 +1359,9 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun spinnerAdapter(items: Array<String>): ArrayAdapter<String> {
+    private fun spinnerAdapter(
+        items: Array<String>
+    ): ArrayAdapter<String> {
         return ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
@@ -1015,11 +1374,13 @@ class MainActivity : Activity() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(
-            this,
-            message,
-            Toast.LENGTH_LONG
-        ).show()
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     // =====================================================
@@ -1031,12 +1392,14 @@ class MainActivity : Activity() {
             mediaPlayer?.release()
         } catch (_: Exception) {
         }
+
         mediaPlayer = null
 
         try {
             lyricsWebView?.destroy()
         } catch (_: Exception) {
         }
+
         lyricsWebView = null
 
         super.onDestroy()
