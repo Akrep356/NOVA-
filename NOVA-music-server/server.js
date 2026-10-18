@@ -501,7 +501,8 @@ function findWanVideoFile(result) {
   return `${HF_WAN_SPACE}/gradio_api/file=${encodeURIComponent(item.value)}`;
 }
 
-// ==================== WAN VIDEO ====================
+// ==================== WAN VIDEO ==============================
+
 
 app.post("/wan-video", async (req, res) => {
   let tempDir = null;
@@ -509,7 +510,7 @@ app.post("/wan-video", async (req, res) => {
   try {
     await runHeavyJob(async () => {
       const imageBase64 = typeof req.body?.imageBase64 === "string"
-        ? req.body.imageBase64
+        ? cleanBase64(req.body.imageBase64)
         : "";
 
       const mime = typeof req.body?.imageMimeType === "string"
@@ -519,40 +520,38 @@ app.post("/wan-video", async (req, res) => {
       const prompt =
         typeof req.body?.prompt === "string" && req.body.prompt.trim()
           ? req.body.prompt.trim()
-          : "Bu görüntüyü doğal ve sinematik şekilde canlandır.";
+          : "Sanatçı doğal yüz hareketleri yapsın, hafifçe hareket etsin ve kamera sinematik şekilde yaklaşsın.";
 
       if (!imageBase64) {
         res.status(400).json({
           ok: false,
-          error: "imageBase64 is required."
+          error: "Sanatçı fotoğrafı gerekli."
         });
         return;
       }
 
-      // Base64 uzunluğu kontrolü: büyük gövdeyi decode etmeden reddet.
-      if (imageBase64.length > 21 * 1024 * 1024) {
-        res.status(413).json({
-          ok: false,
-          error: "Görsel çok büyük. 15 MB'dan küçük bir fotoğraf seç."
-        });
-        return;
-      }
-
-      const imageBuffer = Buffer.from(cleanBase64(imageBase64), "base64");
+      const imageBuffer = Buffer.from(imageBase64, "base64");
 
       if (!imageBuffer.length) {
-        res.status(400).json({ ok: false, error: "Image data is empty." });
+        res.status(400).json({
+          ok: false,
+          error: "Fotoğraf verisi boş."
+        });
         return;
       }
 
       if (imageBuffer.length > 15 * 1024 * 1024) {
-        imageBuffer.fill(0);
         res.status(413).json({
           ok: false,
-          error: "Image is larger than 15 MB."
+          error: "Fotoğraf 15 MB sınırını aşıyor."
         });
         return;
       }
+
+      const imageDataUri =
+        `data:${mime};base64,${imageBuffer.toString("base64")}`;
+
+      imageBuffer.fill(0);
 
       const n = Number(req.body?.duration ?? 3.5);
       const duration = Math.max(
@@ -560,35 +559,16 @@ app.post("/wan-video", async (req, res) => {
         Math.min(5, Number.isFinite(n) ? n : 3.5)
       );
 
-      const filename = mime.includes("png")
-        ? "nova-input.png"
-        : "nova-input.jpg";
-
-      const uploadedPath = await uploadImageToWan(
-        imageBuffer,
-        filename,
-        mime
-      );
-
-      imageBuffer.fill(0);
-
-      const imageData = {
-        path: uploadedPath,
-        orig_name: filename,
-        size: 0,
-        mime_type: mime,
-        is_stream: false,
-        meta: { _type: "gradio.FileData" }
-      };
-
       const gen = await fetch(
         `${HF_WAN_SPACE}/gradio_api/call/generate_video`,
         {
           method: "POST",
-          headers: hfHeaders({ "Content-Type": "application/json" }),
+          headers: hfHeaders({
+            "Content-Type": "application/json"
+          }),
           body: JSON.stringify({
             data: [
-              imageData,
+              imageDataUri,
               prompt,
               6,
               "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
@@ -604,13 +584,18 @@ app.post("/wan-video", async (req, res) => {
       );
 
       const genText = await gen.text();
-      console.log("WAN GENERATE STATUS:", gen.status, genText.slice(0, 2000));
+
+      console.log(
+        "WAN GENERATE STATUS:",
+        gen.status,
+        genText.slice(0, 3000)
+      );
 
       if (!gen.ok) {
         res.status(502).json({
           ok: false,
-          error: "WAN video generation request failed.",
-          details: genText.slice(0, 3000)
+          error: "WAN üretim isteği başarısız.",
+          details: genText
         });
         return;
       }
@@ -620,7 +605,7 @@ app.post("/wan-video", async (req, res) => {
       if (!genData?.event_id) {
         res.status(502).json({
           ok: false,
-          error: "WAN did not return an event_id.",
+          error: "WAN event_id döndürmedi.",
           details: genData
         });
         return;
@@ -630,11 +615,10 @@ app.post("/wan-video", async (req, res) => {
       const videoUrl = findWanVideoFile(result);
 
       if (!videoUrl) {
-        console.error("WAN VIDEO RESULT HAS NO FILE:", JSON.stringify(result).slice(0, 3000));
         res.status(502).json({
           ok: false,
-          error: "WAN video file was not found.",
-          details: "WAN tamamlandı ancak video dosyası bulunamadı."
+          error: "WAN video dosyasını döndürmedi.",
+          result
         });
         return;
       }
@@ -648,16 +632,20 @@ app.post("/wan-video", async (req, res) => {
         maxBytes: 100 * 1024 * 1024
       });
 
-      // Uzun dosyayı Buffer'a çevirmeden aktar.
-      await sendFileStream(res, output, "video/mp4", "nova-wan-video.mp4");
+      await sendFileStream(
+        res,
+        output,
+        "video/mp4",
+        "nova-wan-video.mp4"
+      );
     });
   } catch (e) {
-    console.error("WAN VIDEO ERROR:", e?.stack || errorMessage(e));
+    console.error("WAN VIDEO ERROR:", e?.stack || e);
 
     if (!res.headersSent) {
       res.status(500).json({
         ok: false,
-        error: "NOVA WAN video generation server error.",
+        error: "NOVA WAN video oluşturma hatası.",
         details: errorMessage(e)
       });
     } else if (!res.writableEnded) {
@@ -667,6 +655,7 @@ app.post("/wan-video", async (req, res) => {
     removeTempDir(tempDir);
   }
 });
+
 
 // ==================== MERGE VIDEO + AUDIO ====================
 
