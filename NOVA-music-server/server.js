@@ -46,7 +46,6 @@ function removeTempDir(dir) {
   }
 }
 
-// Ağır işlemleri aynı anda yalnızca bir tane çalıştır.
 let heavyQueue = Promise.resolve();
 
 function runHeavyJob(job) {
@@ -66,13 +65,16 @@ async function downloadToFile(url, filePath, options = {}) {
   if (!r.ok) {
     const details = await r.text().catch(() => "");
     throw new Error(
-      `Download HTTP ${r.status}: ${details.slice(0, 300)}`
+      `Download HTTP ${r.status}: ${details.slice(0, 500)}`
     );
   }
 
-  if (!r.body) throw new Error("İndirme yanıtında dosya verisi yok.");
+  if (!r.body) {
+    throw new Error("İndirme yanıtında dosya verisi yok.");
+  }
 
   const type = r.headers.get("content-type") || "";
+
   if (/text\/html|application\/json/i.test(type)) {
     throw new Error("Video yerine HTML veya JSON geldi.");
   }
@@ -85,6 +87,7 @@ async function downloadToFile(url, filePath, options = {}) {
   const size = fs.statSync(filePath).size;
 
   if (!size) throw new Error("İndirilen dosya boş.");
+
   if (options.maxBytes && size > options.maxBytes) {
     throw new Error("İndirilen dosya boyut sınırını aşıyor.");
   }
@@ -92,7 +95,17 @@ async function downloadToFile(url, filePath, options = {}) {
   return size;
 }
 
+// İstemci bağlantısı kapanmışsa sunucunun çökmesini önle.
 async function sendFileStream(res, filePath, contentType, filename) {
+  if (
+    res.destroyed ||
+    res.writableEnded ||
+    res.socket?.destroyed
+  ) {
+    console.log("CLIENT DISCONNECTED BEFORE FILE SEND:", filename);
+    return false;
+  }
+
   const stat = fs.statSync(filePath);
 
   res.setHeader("Content-Type", contentType);
@@ -103,7 +116,36 @@ async function sendFileStream(res, filePath, contentType, filename) {
   );
   res.setHeader("Cache-Control", "no-store");
 
-  await pipeline(fs.createReadStream(filePath), res);
+  const source = fs.createReadStream(filePath);
+
+  // pipeline reddedilse bile geç gelen open/read hatası işlenir.
+  source.on("error", e => {
+    console.error("FILE STREAM ERROR:", errorMessage(e));
+  });
+
+  try {
+    await pipeline(source, res);
+    return true;
+  } catch (e) {
+    if (
+      res.destroyed ||
+      res.socket?.destroyed ||
+      e.code === "ERR_STREAM_PREMATURE_CLOSE" ||
+      e.code === "ERR_STREAM_DESTROYED" ||
+      e.code === "ERR_STREAM_UNABLE_TO_PIPE" ||
+      e.code === "ECONNRESET" ||
+      e.code === "EPIPE"
+    ) {
+      console.log(
+        "CLIENT DISCONNECTED DURING FILE SEND:",
+        filename,
+        errorMessage(e)
+      );
+      return false;
+    }
+
+    throw e;
+  }
 }
 
 // ==================== MAIN ====================
@@ -150,10 +192,12 @@ app.get("/wan-api-test", async (_req, res) => {
 
     res.status(r.status).type("application/json").send(text);
   } catch (e) {
-    res.status(500).json({
-      ok: false,
-      error: errorMessage(e)
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        ok: false,
+        error: errorMessage(e)
+      });
+    }
   }
 });
 
@@ -239,13 +283,11 @@ app.post("/generate", async (req, res) => {
   } catch (e) {
     console.error("MUSIC ERROR:", errorMessage(e));
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         error: "NOVA music generation server error.",
         details: errorMessage(e)
       });
-    } else if (!res.writableEnded) {
-      res.destroy(e);
     }
   }
 });
@@ -336,7 +378,7 @@ Sadece şarkı sözünü döndür. Açıklama veya giriş yazma.
   } catch (e) {
     console.error("LYRICS ERROR:", errorMessage(e));
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         error: "NOVA lyrics generation server error.",
         details: errorMessage(e)
@@ -376,16 +418,7 @@ async function uploadImageToWan(buffer, filename, mimeType) {
     );
   }
 
-  let data;
-
-  try {
-    data = JSON.parse(text);
-  } catch (_) {
-    throw new Error(
-      `WAN upload returned invalid JSON: ${text.slice(0, 1000)}`
-    );
-  }
-
+  const data = JSON.parse(text);
   let uploadedPath = null;
 
   if (Array.isArray(data) && typeof data[0] === "string") {
@@ -409,22 +442,21 @@ async function uploadImageToWan(buffer, filename, mimeType) {
 }
 
 async function waitForWanResult(eventId) {
-  const url =
+  const r = await fetch(
     `${HF_WAN_SPACE}/gradio_api/call/generate_video/` +
-    encodeURIComponent(eventId);
-
-  const r = await fetch(url, {
-    headers: hfHeaders({
-      Accept: "text/event-stream"
-    }),
-    signal: AbortSignal.timeout(600000)
-  });
+    encodeURIComponent(eventId),
+    {
+      headers: hfHeaders({
+        Accept: "text/event-stream"
+      }),
+      signal: AbortSignal.timeout(600000)
+    }
+  );
 
   console.log("WAN RESULT HTTP STATUS:", r.status);
 
   if (!r.ok) {
     const details = await r.text().catch(() => "");
-
     throw new Error(
       `WAN result failed: HTTP ${r.status}: ${details.slice(0, 4000)}`
     );
@@ -436,23 +468,19 @@ async function waitForWanResult(eventId) {
 
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
-
   let pending = "";
   let totalChars = 0;
 
   try {
     while (true) {
       const { value, done } = await reader.read();
-
       if (done) break;
 
       pending += decoder.decode(value, { stream: true });
       totalChars += value.length;
 
       if (totalChars > 4 * 1024 * 1024) {
-        throw new Error(
-          "WAN event stream 4 MB sınırını aştı."
-        );
+        throw new Error("WAN event stream 4 MB sınırını aştı.");
       }
 
       let boundary;
@@ -476,15 +504,11 @@ async function waitForWanResult(eventId) {
           .join("\n");
 
         console.log("WAN SSE EVENT:", event);
-        console.log(
-          "WAN SSE DATA:",
-          dataText.slice(0, 5000)
-        );
+        console.log("WAN SSE DATA:", dataText.slice(0, 5000));
 
         if (!dataText) continue;
 
         let data;
-
         try {
           data = JSON.parse(dataText);
         } catch (_) {
@@ -492,20 +516,17 @@ async function waitForWanResult(eventId) {
         }
 
         if (event === "error") {
-          const detail =
-            data == null
-              ? "WAN API event:error döndürdü; data null. " +
-                "GPU işlemi, Space logları ve API parametreleri kontrol edilmeli."
+          console.error("WAN SSE ERROR BLOCK:", block);
+
+          throw new Error(
+            "WAN generation error: " +
+            (data == null
+              ? "WAN event:error data=null. Space GPU logs and input parameters must be checked."
               : typeof data === "string"
                 ? data
                 : data?.message ||
                   data?.error ||
-                  JSON.stringify(data);
-
-          console.error("WAN SSE ERROR BLOCK:", block);
-
-          throw new Error(
-            `WAN generation error: ${detail}`
+                  JSON.stringify(data))
           );
         }
 
@@ -514,7 +535,6 @@ async function waitForWanResult(eventId) {
             "WAN GENERATION COMPLETE:",
             dataText.slice(0, 5000)
           );
-
           return data;
         }
       }
@@ -524,8 +544,6 @@ async function waitForWanResult(eventId) {
   }
 
   if (pending.trim()) {
-    console.log("WAN SSE FINAL BLOCK:", pending.slice(0, 5000));
-
     const event =
       pending.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "";
 
@@ -535,6 +553,8 @@ async function waitForWanResult(eventId) {
       .map(line => line.slice(5).trim())
       .join("\n");
 
+    console.log("WAN SSE FINAL BLOCK:", pending.slice(0, 5000));
+
     if (event === "error") {
       throw new Error(
         `WAN generation error: ${dataText || "boş hata verisi"}`
@@ -543,7 +563,6 @@ async function waitForWanResult(eventId) {
 
     if (dataText) {
       let data;
-
       try {
         data = JSON.parse(dataText);
       } catch (_) {
@@ -569,10 +588,7 @@ function findWanVideoFile(result) {
     if (typeof value === "string") {
       if (!seen.has(value)) {
         seen.add(value);
-        items.push({
-          value,
-          type: "string"
-        });
+        items.push({ value, type: "string" });
       }
       return;
     }
@@ -584,19 +600,11 @@ function findWanVideoFile(result) {
 
     if (typeof value === "object") {
       if (typeof value.url === "string") {
-        items.push({
-          value: value.url,
-          type: "url"
-        });
+        items.push({ value: value.url, type: "url" });
       }
-
       if (typeof value.path === "string") {
-        items.push({
-          value: value.path,
-          type: "path"
-        });
+        items.push({ value: value.path, type: "path" });
       }
-
       Object.values(value).forEach(walk);
     }
   }
@@ -613,15 +621,9 @@ function findWanVideoFile(result) {
     items.find(x => x.type === "path");
 
   if (!item) return null;
+  if (/^https?:\/\//i.test(item.value)) return item.value;
 
-  if (/^https?:\/\//i.test(item.value)) {
-    return item.value;
-  }
-
-  return (
-    `${HF_WAN_SPACE}/gradio_api/file=` +
-    encodeURIComponent(item.value)
-  );
+  return `${HF_WAN_SPACE}/gradio_api/file=${encodeURIComponent(item.value)}`;
 }
 
 // ==================== WAN VIDEO ====================
@@ -642,8 +644,7 @@ app.post("/wan-video", async (req, res) => {
           : "image/jpeg";
 
       const prompt =
-        typeof req.body?.prompt === "string" &&
-        req.body.prompt.trim()
+        typeof req.body?.prompt === "string" && req.body.prompt.trim()
           ? req.body.prompt.trim()
           : "Sanatçı doğal yüz hareketleri yapsın, hafifçe hareket etsin ve kamera sinematik şekilde yaklaşsın.";
 
@@ -676,7 +677,6 @@ app.post("/wan-video", async (req, res) => {
 
       if (imageBuffer.length > 15 * 1024 * 1024) {
         imageBuffer.fill(0);
-
         res.status(413).json({
           ok: false,
           error: "Fotoğraf 15 MB sınırını aşıyor."
@@ -685,7 +685,6 @@ app.post("/wan-video", async (req, res) => {
       }
 
       const n = Number(req.body?.duration ?? 3.5);
-
       const duration = Math.max(
         0.5,
         Math.min(5, Number.isFinite(n) ? n : 3.5)
@@ -697,7 +696,6 @@ app.post("/wan-video", async (req, res) => {
         console.log("WAN IMAGE MIME:", mime);
         console.log("WAN VIDEO DURATION:", duration);
 
-        // Fotoğrafı önce Gradio sunucusuna yükle.
         const uploadedImagePath = await uploadImageToWan(
           imageBuffer,
           mime === "image/png"
@@ -710,12 +708,8 @@ app.post("/wan-video", async (req, res) => {
 
         imageBuffer.fill(0);
 
-        console.log(
-          "WAN UPLOADED IMAGE PATH:",
-          uploadedImagePath
-        );
+        console.log("WAN UPLOADED IMAGE PATH:", uploadedImagePath);
 
-        // Gradio FileData biçiminde fotoğraf gönder.
         const imageFileData = {
           path: uploadedImagePath,
           meta: {
@@ -723,6 +717,10 @@ app.post("/wan-video", async (req, res) => {
           }
         };
 
+        // API /gradio_api/info içindeki gerçek parametre sırası:
+        // image, prompt, steps, negative_prompt, duration_seconds,
+        // flow_shift, guidance_scale, guidance_scale_2, seed,
+        // randomize_seed.
         const payload = {
           data: [
             imageFileData,
@@ -730,6 +728,7 @@ app.post("/wan-video", async (req, res) => {
             6,
             "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
             duration,
+            3,
             1,
             1,
             42,
@@ -744,7 +743,11 @@ app.post("/wan-video", async (req, res) => {
             imagePath: uploadedImagePath,
             promptLength: prompt.length,
             duration,
-            seed: 42
+            flowShift: 3,
+            guidanceScale: 1,
+            guidanceScale2: 1,
+            seed: 42,
+            randomizeSeed: true
           })
         );
 
@@ -778,7 +781,6 @@ app.post("/wan-video", async (req, res) => {
         }
 
         let genData;
-
         try {
           genData = JSON.parse(genText);
         } catch (_) {
@@ -799,14 +801,9 @@ app.post("/wan-video", async (req, res) => {
           return;
         }
 
-        console.log(
-          "WAN EVENT ID:",
-          genData.event_id
-        );
+        console.log("WAN EVENT ID:", genData.event_id);
 
-        const result = await waitForWanResult(
-          genData.event_id
-        );
+        const result = await waitForWanResult(genData.event_id);
 
         console.log(
           "WAN RESULT DATA:",
@@ -827,11 +824,7 @@ app.post("/wan-video", async (req, res) => {
         console.log("WAN VIDEO URL FOUND");
 
         tempDir = makeTempDir("nova-wan-");
-
-        const output = path.join(
-          tempDir,
-          "nova-wan-video.mp4"
-        );
+        const output = path.join(tempDir, "nova-wan-video.mp4");
 
         await downloadToFile(videoUrl, output, {
           headers: hfHeaders(),
@@ -842,16 +835,10 @@ app.post("/wan-video", async (req, res) => {
         const stat = fs.statSync(output);
 
         if (stat.size < 1000) {
-          throw new Error(
-            "WAN video dosyası beklenenden küçük."
-          );
+          throw new Error("WAN video dosyası beklenenden küçük.");
         }
 
-        console.log(
-          "WAN VIDEO DOWNLOADED:",
-          stat.size,
-          "bytes"
-        );
+        console.log("WAN VIDEO DOWNLOADED:", stat.size, "bytes");
 
         await sendFileStream(
           res,
@@ -860,24 +847,19 @@ app.post("/wan-video", async (req, res) => {
           "nova-wan-video.mp4"
         );
       } finally {
-        if (imageBuffer.length) {
-          imageBuffer.fill(0);
-        }
+        if (imageBuffer.length) imageBuffer.fill(0);
       }
     });
   } catch (e) {
-    console.error(
-      "WAN VIDEO ERROR:",
-      e?.stack || errorMessage(e)
-    );
+    console.error("WAN VIDEO ERROR:", e?.stack || errorMessage(e));
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         ok: false,
         error: "NOVA WAN video oluşturma hatası.",
         details: errorMessage(e)
       });
-    } else if (!res.writableEnded) {
+    } else if (!res.writableEnded && !res.destroyed) {
       res.destroy(e);
     }
   } finally {
@@ -921,20 +903,12 @@ app.post("/merge-video-audio", async (req, res) => {
         return;
       }
 
-      const video = Buffer.from(
-        cleanBase64(videoBase64),
-        "base64"
-      );
-
-      const audio = Buffer.from(
-        cleanBase64(audioBase64),
-        "base64"
-      );
+      const video = Buffer.from(cleanBase64(videoBase64), "base64");
+      const audio = Buffer.from(cleanBase64(audioBase64), "base64");
 
       if (!video.length || !audio.length) {
         video.fill(0);
         audio.fill(0);
-
         res.status(400).json({
           ok: false,
           error: "Video or audio data is empty."
@@ -948,7 +922,6 @@ app.post("/merge-video-audio", async (req, res) => {
       ) {
         video.fill(0);
         audio.fill(0);
-
         res.status(413).json({
           ok: false,
           error: "Video or audio exceeds the size limit."
@@ -958,20 +931,9 @@ app.post("/merge-video-audio", async (req, res) => {
 
       tempDir = makeTempDir("nova-merge-");
 
-      const inputVideo = path.join(
-        tempDir,
-        "input-video.mp4"
-      );
-
-      const inputAudio = path.join(
-        tempDir,
-        "input-audio.mp3"
-      );
-
-      const output = path.join(
-        tempDir,
-        "output-video.mp4"
-      );
+      const inputVideo = path.join(tempDir, "input-video.mp4");
+      const inputAudio = path.join(tempDir, "input-audio.mp3");
+      const output = path.join(tempDir, "output-video.mp4");
 
       fs.writeFileSync(inputVideo, video);
       fs.writeFileSync(inputAudio, audio);
@@ -1002,13 +964,8 @@ app.post("/merge-video-audio", async (req, res) => {
         maxBuffer: 3 * 1024 * 1024
       });
 
-      if (
-        !fs.existsSync(output) ||
-        !fs.statSync(output).size
-      ) {
-        throw new Error(
-          "FFmpeg output video was not created."
-        );
+      if (!fs.existsSync(output) || !fs.statSync(output).size) {
+        throw new Error("FFmpeg output video was not created.");
       }
 
       await sendFileStream(
@@ -1024,14 +981,12 @@ app.post("/merge-video-audio", async (req, res) => {
       e?.stack || errorMessage(e)
     );
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         ok: false,
         error: "NOVA video + audio merge server error.",
         details: errorMessage(e)
       });
-    } else if (!res.writableEnded) {
-      res.destroy(e);
     }
   } finally {
     removeTempDir(tempDir);
@@ -1051,7 +1006,6 @@ async function commonsFetch(url) {
     );
 
     if (wait) await sleep(wait);
-
     lastCommonsRequestAt = Date.now();
 
     const r = await fetch(url, {
@@ -1065,9 +1019,7 @@ async function commonsFetch(url) {
     const text = await r.text();
 
     if (r.status === 429 || r.status === 503) {
-      throw new Error(
-        `Wikimedia HTTP ${r.status}: rate limited.`
-      );
+      throw new Error(`Wikimedia HTTP ${r.status}: rate limited.`);
     }
 
     if (!r.ok) {
@@ -1078,16 +1030,12 @@ async function commonsFetch(url) {
 
     const data = JSON.parse(text);
 
-    if (data?.error) {
-      throw new Error(JSON.stringify(data.error));
-    }
-
+    if (data?.error) throw new Error(JSON.stringify(data.error));
     return data;
   };
 
   const request = commonsQueue.then(run, run);
   commonsQueue = request.catch(() => {});
-
   return request;
 }
 
@@ -1104,8 +1052,7 @@ async function searchCommonsVideos(query, maxResults = 6) {
   });
 
   const search = await commonsFetch(
-    "https://commons.wikimedia.org/w/api.php?" +
-    params.toString()
+    "https://commons.wikimedia.org/w/api.php?" + params.toString()
   );
 
   const ids = (search?.query?.search || [])
@@ -1124,23 +1071,19 @@ async function searchCommonsVideos(query, maxResults = 6) {
   });
 
   const info = await commonsFetch(
-    "https://commons.wikimedia.org/w/api.php?" +
-    infoParams.toString()
+    "https://commons.wikimedia.org/w/api.php?" + infoParams.toString()
   );
 
   return (info?.query?.pages || [])
     .map(page => {
       const i = page?.imageinfo?.[0];
-
       if (!i?.url) return null;
 
       const isVideo =
         i.mediatype === "VIDEO" ||
         /^video\//i.test(i.mime || "") ||
         /\.(mp4|webm|ogv|mov|m4v)(?:$|[?#])/i.test(i.url) ||
-        /\.(mp4|webm|ogv|mov|m4v)$/i.test(
-          page.title || ""
-        );
+        /\.(mp4|webm|ogv|mov|m4v)$/i.test(page.title || "");
 
       const size = Number(i.size);
 
@@ -1179,36 +1122,27 @@ app.post("/prepare-video", async (req, res) => {
     await runHeavyJob(async () => {
       console.log("NOVA PREPARE VIDEO REQUEST STARTED");
 
-      const lyrics =
-        typeof req.body?.lyrics === "string"
-          ? req.body.lyrics.trim()
-          : "";
+      const lyrics = typeof req.body?.lyrics === "string"
+        ? req.body.lyrics.trim()
+        : "";
 
-      const style =
-        typeof req.body?.style === "string"
-          ? req.body.style.trim()
-          : "Sinematik";
+      const style = typeof req.body?.style === "string"
+        ? req.body.style.trim()
+        : "Sinematik";
 
-      const visual =
-        typeof req.body?.visualDescription === "string"
-          ? req.body.visualDescription.trim()
-          : "";
+      const visual = typeof req.body?.visualDescription === "string"
+        ? req.body.visualDescription.trim()
+        : "";
 
       const n = Number(req.body?.duration ?? 10);
-
       const duration = Math.max(
         1,
-        Math.min(
-          180,
-          Number.isFinite(n) && n > 0 ? n : 10
-        )
+        Math.min(180, Number.isFinite(n) && n > 0 ? n : 10)
       );
 
-      const orientation = [
-        "9:16",
-        "16:9",
-        "1:1"
-      ].includes(req.body?.orientation)
+      const orientation = ["9:16", "16:9", "1:1"].includes(
+        req.body?.orientation
+      )
         ? req.body.orientation
         : "9:16";
 
@@ -1244,30 +1178,18 @@ app.post("/prepare-video", async (req, res) => {
         "cinematic landscape";
 
       tempDir = makeTempDir("nova-video-");
-
       let sources = [];
 
       try {
         console.log("WIKIMEDIA ARAMA:", query);
-
         sources = await searchCommonsVideos(query, 6);
-
-        console.log(
-          "WIKIMEDIA ARAMA SONUÇ SAYISI:",
-          sources.length
-        );
+        console.log("WIKIMEDIA ARAMA SONUÇ SAYISI:", sources.length);
       } catch (e) {
-        console.error(
-          "WIKIMEDIA ARAMA HATASI:",
-          errorMessage(e)
-        );
+        console.error("WIKIMEDIA ARAMA HATASI:", errorMessage(e));
       }
 
       if (!sources.length) {
-        console.log(
-          "WIKIMEDIA YEDEK VIDEO KAYNAĞI KULLANILACAK"
-        );
-
+        console.log("WIKIMEDIA YEDEK VIDEO KAYNAĞI KULLANILACAK");
         sources = [FALLBACK_VIDEO];
       }
 
@@ -1290,9 +1212,7 @@ app.post("/prepare-video", async (req, res) => {
 
       const segments = [];
       let remaining = duration;
-
-      const maxSegments =
-        Math.ceil(duration / 5) + sources.length;
+      const maxSegments = Math.ceil(duration / 5) + sources.length;
 
       for (
         let i = 0;
@@ -1301,31 +1221,16 @@ app.post("/prepare-video", async (req, res) => {
       ) {
         const source = sources[i % sources.length];
         const segDuration = Math.min(5, remaining);
-
-        const inputFile = path.join(
-          tempDir,
-          `source-${i}.video`
-        );
-
-        const segmentFile = path.join(
-          tempDir,
-          `segment-${i}.mp4`
-        );
+        const inputFile = path.join(tempDir, `source-${i}.video`);
+        const segmentFile = path.join(tempDir, `segment-${i}.mp4`);
 
         try {
-          console.log(
-            "VIDEO İNDİRİLİYOR:",
-            source.title
-          );
+          console.log("VIDEO İNDİRİLİYOR:", source.title);
 
-          await downloadToFile(
-            source.url,
-            inputFile,
-            {
-              timeout: 60000,
-              maxBytes: 60 * 1024 * 1024
-            }
-          );
+          await downloadToFile(source.url, inputFile, {
+            timeout: 60000,
+            maxBytes: 60 * 1024 * 1024
+          });
 
           await execFileAsync("ffmpeg", [
             "-y",
@@ -1352,24 +1257,14 @@ app.post("/prepare-video", async (req, res) => {
             !fs.existsSync(segmentFile) ||
             !fs.statSync(segmentFile).size
           ) {
-            throw new Error(
-              "FFmpeg boş video parçası oluşturdu."
-            );
+            throw new Error("FFmpeg boş video parçası oluşturdu.");
           }
 
           segments.push(segmentFile);
           remaining -= segDuration;
-
-          console.log(
-            "VIDEO SEGMENT HAZIR:",
-            i,
-            segDuration
-          );
+          console.log("VIDEO SEGMENT HAZIR:", i, segDuration);
         } catch (e) {
-          console.error(
-            "VIDEO SEGMENT HATASI:",
-            errorMessage(e)
-          );
+          console.error("VIDEO SEGMENT HATASI:", errorMessage(e));
         } finally {
           try {
             if (fs.existsSync(inputFile)) {
@@ -1385,29 +1280,17 @@ app.post("/prepare-video", async (req, res) => {
         );
       }
 
-      const outputFile = path.join(
-        tempDir,
-        "nova-video.mp4"
-      );
+      const outputFile = path.join(tempDir, "nova-video.mp4");
 
       if (segments.length === 1) {
-        fs.copyFileSync(
-          segments[0],
-          outputFile
-        );
+        fs.copyFileSync(segments[0], outputFile);
       } else {
-        const concatFile = path.join(
-          tempDir,
-          "concat.txt"
-        );
+        const concatFile = path.join(tempDir, "concat.txt");
 
         fs.writeFileSync(
           concatFile,
           segments
-            .map(
-              file =>
-                `file '${file.replace(/'/g, "'\\''")}'`
-            )
+            .map(file => `file '${file.replace(/'/g, "'\\''")}'`)
             .join("\n"),
           "utf8"
         );
@@ -1428,13 +1311,8 @@ app.post("/prepare-video", async (req, res) => {
         });
       }
 
-      if (
-        !fs.existsSync(outputFile) ||
-        !fs.statSync(outputFile).size
-      ) {
-        throw new Error(
-          "FFmpeg son MP4 dosyasını oluşturamadı."
-        );
+      if (!fs.existsSync(outputFile) || !fs.statSync(outputFile).size) {
+        throw new Error("FFmpeg son MP4 dosyasını oluşturamadı.");
       }
 
       const fd = fs.openSync(outputFile, "r");
@@ -1446,12 +1324,8 @@ app.post("/prepare-video", async (req, res) => {
         fs.closeSync(fd);
       }
 
-      if (
-        header.subarray(4, 8).toString("ascii") !== "ftyp"
-      ) {
-        throw new Error(
-          "Oluşturulan dosya geçerli MP4 değil."
-        );
+      if (header.subarray(4, 8).toString("ascii") !== "ftyp") {
+        throw new Error("Oluşturulan dosya geçerli MP4 değil.");
       }
 
       console.log(
@@ -1468,19 +1342,14 @@ app.post("/prepare-video", async (req, res) => {
       );
     });
   } catch (e) {
-    console.error(
-      "PREPARE VIDEO ERROR:",
-      e?.stack || errorMessage(e)
-    );
+    console.error("PREPARE VIDEO ERROR:", e?.stack || errorMessage(e));
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         ok: false,
         error: "NOVA video oluşturma hatası.",
         details: errorMessage(e)
       });
-    } else if (!res.writableEnded) {
-      res.destroy(e);
     }
   } finally {
     removeTempDir(tempDir);
@@ -1490,7 +1359,5 @@ app.post("/prepare-video", async (req, res) => {
 // ==================== SERVER ====================
 
 app.listen(PORT, () => {
-  console.log(
-    `NOVA Music Server listening on port ${PORT}`
-  );
+  console.log(`NOVA Music Server listening on port ${PORT}`);
 });
