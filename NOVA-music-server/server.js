@@ -6,6 +6,8 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const { pipeline } = require("stream/promises");
+const { Readable } = require("stream");
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -14,8 +16,7 @@ const PORT = process.env.PORT || 3000;
 const STABILITY_API_KEY = process.env.STABILITY_API_KEY || "";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const HF_TOKEN = process.env.HF_TOKEN || "";
-const HF_WAN_SPACE =
-  "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space";
+const HF_WAN_SPACE = "https://zerogpu-aoti-wan2-2-fp8da-aoti-faster.hf.space";
 
 app.use(cors());
 app.use(express.json({ limit: "100mb" }));
@@ -29,6 +30,87 @@ function hfHeaders(extra = {}) {
   if (HF_TOKEN) headers.Authorization = `Bearer ${HF_TOKEN}`;
   return headers;
 }
+
+function makeTempDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function removeTempDir(dir) {
+  try {
+    if (dir && fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch (e) {
+    console.error("TEMP CLEANUP ERROR:", errorMessage(e));
+  }
+}
+
+// Ağır video işlemlerini sıraya koyarak aynı anda birden fazla
+// FFmpeg işleminin bellek tüketmesini önlemeye çalışır.
+let heavyQueue = Promise.resolve();
+
+function runHeavyJob(job) {
+  const next = heavyQueue.then(job, job);
+  heavyQueue = next.catch(() => {});
+  return next;
+}
+
+async function downloadToFile(url, filePath, options = {}) {
+  const r = await fetch(url, {
+    headers: options.headers || {
+      "User-Agent": "NOVA-Music-Video/1.0"
+    },
+    signal: AbortSignal.timeout(options.timeout || 60000)
+  });
+
+  if (!r.ok) {
+    const details = await r.text().catch(() => "");
+    throw new Error(
+      `Download HTTP ${r.status}: ${details.slice(0, 300)}`
+    );
+  }
+
+  if (!r.body) {
+    throw new Error("Download response has no body.");
+  }
+
+  const type = r.headers.get("content-type") || "";
+
+  if (/text\/html|application\/json/i.test(type)) {
+    throw new Error("Kaynak video yerine HTML/JSON döndü.");
+  }
+
+  await pipeline(
+    Readable.fromWeb(r.body),
+    fs.createWriteStream(filePath)
+  );
+
+  const size = fs.statSync(filePath).size;
+
+  if (!size) throw new Error("İndirilen dosya boş.");
+
+  if (options.maxBytes && size > options.maxBytes) {
+    throw new Error(`Dosya ${options.maxBytes} bayt sınırını aşıyor.`);
+  }
+
+  return size;
+}
+
+async function sendFileStream(res, filePath, contentType, filename) {
+  const stat = fs.statSync(filePath);
+
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${filename}"`
+  );
+  res.setHeader("Cache-Control", "no-store");
+
+  await pipeline(fs.createReadStream(filePath), res);
+}
+
+// ==================== MAIN ====================
 
 app.get("/", (_req, res) => {
   res.json({
@@ -52,7 +134,7 @@ app.get("/health", (_req, res) => {
     stabilityKeyConfigured: Boolean(STABILITY_API_KEY),
     geminiKeyConfigured: Boolean(GEMINI_API_KEY),
     hfTokenConfigured: Boolean(HF_TOKEN),
-    videoEngine: "Wikimedia Commons + FFmpeg",
+    videoEngine: "Wikimedia Commons + FFmpeg (low-memory)",
     wanEngine: "Hugging Face Wan 2.2 I2V",
     mergeEngine: "FFmpeg"
   });
@@ -63,9 +145,13 @@ app.get("/wan-api-test", async (_req, res) => {
     const r = await fetch(`${HF_WAN_SPACE}/gradio_api/info`, {
       signal: AbortSignal.timeout(30000)
     });
+
     res.status(r.status).type("application/json").send(await r.text());
   } catch (e) {
-    res.status(500).json({ ok: false, error: errorMessage(e) });
+    res.status(500).json({
+      ok: false,
+      error: errorMessage(e)
+    });
   }
 });
 
@@ -80,7 +166,8 @@ app.post("/generate", async (req, res) => {
     }
 
     const prompt = typeof req.body?.prompt === "string"
-      ? req.body.prompt.trim() : "";
+      ? req.body.prompt.trim()
+      : "";
 
     if (!prompt) {
       return res.status(400).json({ error: "prompt is required." });
@@ -129,9 +216,7 @@ app.post("/generate", async (req, res) => {
       });
     }
 
-    const buffer = Buffer.from(await r.arrayBuffer());
-
-    if (!buffer.length) {
+    if (!r.body) {
       return res.status(502).json({
         error: "Stable Audio returned an empty file."
       });
@@ -144,7 +229,7 @@ app.post("/generate", async (req, res) => {
     );
     res.setHeader("Cache-Control", "no-store");
 
-    return res.send(buffer);
+    await pipeline(Readable.fromWeb(r.body), res);
   } catch (e) {
     console.error("Music generation error:", e);
 
@@ -153,6 +238,8 @@ app.post("/generate", async (req, res) => {
         error: "NOVA music generation server error.",
         details: errorMessage(e)
       });
+    } else if (!res.writableEnded) {
+      res.destroy(e);
     }
   }
 });
@@ -168,7 +255,8 @@ app.post("/generate-lyrics", async (req, res) => {
     }
 
     const topic = typeof req.body?.topic === "string"
-      ? req.body.topic.trim() : "";
+      ? req.body.topic.trim()
+      : "";
 
     if (!topic) {
       return res.status(400).json({ error: "topic is required." });
@@ -224,7 +312,9 @@ Sadece şarkı sözünü döndür. Açıklama veya giriş yazma.
 
     const data = JSON.parse(text);
     const lyrics = data?.candidates?.[0]?.content?.parts
-      ?.map(p => p?.text || "").join("").trim();
+      ?.map(p => p?.text || "")
+      .join("")
+      .trim();
 
     if (!lyrics) {
       return res.status(502).json({
@@ -233,7 +323,7 @@ Sadece şarkı sözünü döndür. Açıklama veya giriş yazma.
       });
     }
 
-    return res.json({ ok: true, lyrics });
+    res.json({ ok: true, lyrics });
   } catch (e) {
     console.error("Lyrics generation error:", e);
 
@@ -391,146 +481,150 @@ function findWanVideoFile(result) {
 // ==================== WAN VIDEO ====================
 
 app.post("/wan-video", async (req, res) => {
+  let tempDir = null;
+
   try {
-    const imageBase64 = typeof req.body?.imageBase64 === "string"
-      ? req.body.imageBase64 : "";
+    await runHeavyJob(async () => {
+      const imageBase64 = typeof req.body?.imageBase64 === "string"
+        ? req.body.imageBase64
+        : "";
 
-    const mime = typeof req.body?.imageMimeType === "string"
-      ? req.body.imageMimeType : "image/jpeg";
+      const mime = typeof req.body?.imageMimeType === "string"
+        ? req.body.imageMimeType
+        : "image/jpeg";
 
-    const prompt =
-      typeof req.body?.prompt === "string" && req.body.prompt.trim()
-        ? req.body.prompt.trim()
-        : "Bu görüntüyü doğal ve sinematik şekilde canlandır.";
+      const prompt =
+        typeof req.body?.prompt === "string" && req.body.prompt.trim()
+          ? req.body.prompt.trim()
+          : "Bu görüntüyü doğal ve sinematik şekilde canlandır.";
 
-    if (!imageBase64) {
-      return res.status(400).json({
-        ok: false,
-        error: "imageBase64 is required."
-      });
-    }
-
-    const imageBuffer = Buffer.from(cleanBase64(imageBase64), "base64");
-
-    if (!imageBuffer.length) {
-      return res.status(400).json({
-        ok: false,
-        error: "Image data is empty."
-      });
-    }
-
-    if (imageBuffer.length > 15 * 1024 * 1024) {
-      return res.status(413).json({
-        ok: false,
-        error: "Image is larger than 15 MB."
-      });
-    }
-
-    const n = Number(req.body?.duration ?? 3.5);
-    const duration = Math.max(
-      0.5,
-      Math.min(5, Number.isFinite(n) ? n : 3.5)
-    );
-
-    const filename = mime.includes("png")
-      ? "nova-input.png"
-      : "nova-input.jpg";
-
-    const uploadedPath = await uploadImageToWan(
-      imageBuffer,
-      filename,
-      mime
-    );
-
-    const imageData = {
-      path: uploadedPath,
-      orig_name: filename,
-      size: imageBuffer.length,
-      mime_type: mime,
-      is_stream: false,
-      meta: { _type: "gradio.FileData" }
-    };
-
-    const wanData = [
-      imageData,
-      prompt,
-      6,
-      "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
-      duration,
-      1,
-      1,
-      42,
-      true
-    ];
-
-    const gen = await fetch(
-      `${HF_WAN_SPACE}/gradio_api/call/generate_video`,
-      {
-        method: "POST",
-        headers: hfHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ data: wanData }),
-        signal: AbortSignal.timeout(120000)
+      if (!imageBase64) {
+        res.status(400).json({
+          ok: false,
+          error: "imageBase64 is required."
+        });
+        return;
       }
-    );
 
-    const genText = await gen.text();
+      const imageBuffer = Buffer.from(cleanBase64(imageBase64), "base64");
 
-    console.log("WAN GENERATE STATUS:", gen.status, genText.slice(0, 5000));
+      if (!imageBuffer.length) {
+        res.status(400).json({
+          ok: false,
+          error: "Image data is empty."
+        });
+        return;
+      }
 
-    if (!gen.ok) {
-      return res.status(502).json({
-        ok: false,
-        error: "WAN video generation request failed.",
-        details: genText
-      });
-    }
+      if (imageBuffer.length > 15 * 1024 * 1024) {
+        return res.status(413).json({
+          ok: false,
+          error: "Image is larger than 15 MB."
+        });
+      }
 
-    const genData = JSON.parse(genText);
-
-    if (!genData?.event_id) {
-      return res.status(502).json({
-        ok: false,
-        error: "WAN did not return an event_id.",
-        details: genData
-      });
-    }
-
-    const result = await waitForWanResult(genData.event_id);
-    const videoUrl = findWanVideoFile(result);
-
-    if (!videoUrl) {
-      return res.status(502).json({
-        ok: false,
-        error: "WAN video file was not found.",
-        result
-      });
-    }
-
-    const videoResponse = await fetch(videoUrl, {
-      headers: hfHeaders(),
-      signal: AbortSignal.timeout(180000)
-    });
-
-    if (!videoResponse.ok) {
-      throw new Error(
-        `WAN video download failed: ${videoResponse.status} ${await videoResponse.text()}`
+      const n = Number(req.body?.duration ?? 3.5);
+      const duration = Math.max(
+        0.5,
+        Math.min(5, Number.isFinite(n) ? n : 3.5)
       );
-    }
 
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+      const filename = mime.includes("png")
+        ? "nova-input.png"
+        : "nova-input.jpg";
 
-    if (!videoBuffer.length) {
-      throw new Error("WAN video file is empty.");
-    }
+      const uploadedPath = await uploadImageToWan(
+        imageBuffer,
+        filename,
+        mime
+      );
 
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader(
-      "Content-Disposition",
-      'inline; filename="nova-wan-video.mp4"'
-    );
-    res.setHeader("Cache-Control", "no-store");
+      imageBuffer.fill(0);
 
-    return res.send(videoBuffer);
+      const imageData = {
+        path: uploadedPath,
+        orig_name: filename,
+        size: 0,
+        mime_type: mime,
+        is_stream: false,
+        meta: { _type: "gradio.FileData" }
+      };
+
+      const gen = await fetch(
+        `${HF_WAN_SPACE}/gradio_api/call/generate_video`,
+        {
+          method: "POST",
+          headers: hfHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            data: [
+              imageData,
+              prompt,
+              6,
+              "blurry, distorted face, deformed hands, extra fingers, duplicate person, bad anatomy, low quality",
+              duration,
+              1,
+              1,
+              42,
+              true
+            ]
+          }),
+          signal: AbortSignal.timeout(120000)
+        }
+      );
+
+      const genText = await gen.text();
+
+      console.log("WAN GENERATE STATUS:", gen.status, genText.slice(0, 5000));
+
+      if (!gen.ok) {
+        res.status(502).json({
+          ok: false,
+          error: "WAN video generation request failed.",
+          details: genText
+        });
+        return;
+      }
+
+      const genData = JSON.parse(genText);
+
+      if (!genData?.event_id) {
+        res.status(502).json({
+          ok: false,
+          error: "WAN did not return an event_id.",
+          details: genData
+        });
+        return;
+      }
+
+      const result = await waitForWanResult(genData.event_id);
+      const videoUrl = findWanVideoFile(result);
+
+      if (!videoUrl) {
+        res.status(502).json({
+          ok: false,
+          error: "WAN video file was not found.",
+          result
+        });
+        return;
+      }
+
+      tempDir = makeTempDir("nova-wan-");
+
+      const output = path.join(tempDir, "nova-wan-video.mp4");
+
+      await downloadToFile(videoUrl, output, {
+        headers: hfHeaders(),
+        timeout: 180000,
+        maxBytes: 100 * 1024 * 1024
+      });
+
+      await sendFileStream(
+        res,
+        output,
+        "video/mp4",
+        "nova-wan-video.mp4"
+      );
+    });
   } catch (e) {
     console.error("WAN VIDEO ERROR:", e);
 
@@ -540,7 +634,11 @@ app.post("/wan-video", async (req, res) => {
         error: "NOVA WAN video generation server error.",
         details: errorMessage(e)
       });
+    } else if (!res.writableEnded) {
+      res.destroy(e);
     }
+  } finally {
+    removeTempDir(tempDir);
   }
 });
 
@@ -550,85 +648,102 @@ app.post("/merge-video-audio", async (req, res) => {
   let tempDir = null;
 
   try {
-    const videoBase64 = typeof req.body?.videoBase64 === "string"
-      ? req.body.videoBase64 : "";
+    await runHeavyJob(async () => {
+      const videoBase64 = typeof req.body?.videoBase64 === "string"
+        ? req.body.videoBase64
+        : "";
 
-    const audioBase64 = typeof req.body?.audioBase64 === "string"
-      ? req.body.audioBase64 : "";
+      const audioBase64 = typeof req.body?.audioBase64 === "string"
+        ? req.body.audioBase64
+        : "";
 
-    if (!videoBase64 || !audioBase64) {
-      return res.status(400).json({
-        ok: false,
-        error: "videoBase64 and audioBase64 are required."
+      if (!videoBase64 || !audioBase64) {
+        res.status(400).json({
+          ok: false,
+          error: "videoBase64 and audioBase64 are required."
+        });
+        return;
+      }
+
+      if (
+        videoBase64.length > 70 * 1024 * 1024 ||
+        audioBase64.length > 42 * 1024 * 1024
+      ) {
+        res.status(413).json({
+          ok: false,
+          error: "Video or audio payload is too large."
+        });
+        return;
+      }
+
+      const video = Buffer.from(cleanBase64(videoBase64), "base64");
+      const audio = Buffer.from(cleanBase64(audioBase64), "base64");
+
+      if (!video.length || !audio.length) {
+        res.status(400).json({
+          ok: false,
+          error: "Video or audio data is empty."
+        });
+        return;
+      }
+
+      if (
+        video.length > 50 * 1024 * 1024 ||
+        audio.length > 30 * 1024 * 1024
+      ) {
+        res.status(413).json({
+          ok: false,
+          error: "Video or audio exceeds the size limit."
+        });
+        return;
+      }
+
+      tempDir = makeTempDir("nova-merge-");
+
+      const inputVideo = path.join(tempDir, "input-video.mp4");
+      const inputAudio = path.join(tempDir, "input-audio.mp3");
+      const output = path.join(tempDir, "output-video.mp4");
+
+      fs.writeFileSync(inputVideo, video);
+      fs.writeFileSync(inputAudio, audio);
+
+      video.fill(0);
+      audio.fill(0);
+
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-threads", "1",
+        "-i", inputVideo,
+        "-i", inputAudio,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "libx264",
+        "-threads", "1",
+        "-preset", "ultrafast",
+        "-crf", "28",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "44100",
+        "-shortest",
+        "-movflags", "+faststart",
+        output
+      ], {
+        timeout: 240000,
+        maxBuffer: 5 * 1024 * 1024
       });
-    }
 
-    const video = Buffer.from(cleanBase64(videoBase64), "base64");
-    const audio = Buffer.from(cleanBase64(audioBase64), "base64");
+      if (!fs.existsSync(output) || !fs.statSync(output).size) {
+        throw new Error("FFmpeg output video was not created.");
+      }
 
-    if (!video.length || !audio.length) {
-      return res.status(400).json({
-        ok: false,
-        error: "Video or audio data is empty."
-      });
-    }
-
-    if (video.length > 50 * 1024 * 1024) {
-      return res.status(413).json({
-        ok: false,
-        error: "Video exceeds 50 MB."
-      });
-    }
-
-    if (audio.length > 30 * 1024 * 1024) {
-      return res.status(413).json({
-        ok: false,
-        error: "Audio exceeds 30 MB."
-      });
-    }
-
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "nova-merge-"));
-
-    const inputVideo = path.join(tempDir, "input-video.mp4");
-    const inputAudio = path.join(tempDir, "input-audio.mp3");
-    const output = path.join(tempDir, "output-video.mp4");
-
-    fs.writeFileSync(inputVideo, video);
-    fs.writeFileSync(inputAudio, audio);
-
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-i", inputVideo,
-      "-i", inputAudio,
-      "-map", "0:v:0",
-      "-map", "1:a:0",
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "23",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "192k",
-      "-ar", "44100",
-      "-shortest",
-      "-movflags", "+faststart",
-      output
-    ], {
-      timeout: 240000,
-      maxBuffer: 20 * 1024 * 1024
+      await sendFileStream(
+        res,
+        output,
+        "video/mp4",
+        "nova-music-video.mp4"
+      );
     });
-
-    if (!fs.existsSync(output) || fs.statSync(output).size === 0) {
-      throw new Error("FFmpeg output video was not created.");
-    }
-
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader(
-      "Content-Disposition",
-      'inline; filename="nova-music-video.mp4"'
-    );
-    res.setHeader("Cache-Control", "no-store");
-
-    return res.send(fs.readFileSync(output));
   } catch (e) {
     console.error("VIDEO + AUDIO MERGE ERROR:", e);
 
@@ -638,22 +753,16 @@ app.post("/merge-video-audio", async (req, res) => {
         error: "NOVA video + audio merge server error.",
         details: errorMessage(e)
       });
+    } else if (!res.writableEnded) {
+      res.destroy(e);
     }
   } finally {
-    try {
-      if (tempDir && fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.error("Merge cleanup error:", e);
-    }
+    removeTempDir(tempDir);
   }
 });
 
-// ==================== WIKIMEDIA VIDEO SEARCH ====================
+// ==================== WIKIMEDIA SEARCH ====================
 
-// Commons istekleri tek bir sırada yürütülür.
-// Böylece eşzamanlı video talepleri istekleri üst üste bindirmez.
 let lastCommonsRequestAt = 0;
 let commonsQueue = Promise.resolve();
 
@@ -664,7 +773,7 @@ async function commonsFetch(url) {
       3500 - (Date.now() - lastCommonsRequestAt)
     );
 
-    if (wait > 0) await sleep(wait);
+    if (wait) await sleep(wait);
 
     lastCommonsRequestAt = Date.now();
 
@@ -679,40 +788,33 @@ async function commonsFetch(url) {
     const text = await r.text();
 
     if (r.status === 429 || r.status === 503) {
-      throw new Error(
-        `Wikimedia HTTP ${r.status}: istek sınırına ulaşıldı.`
-      );
+      throw new Error(`Wikimedia HTTP ${r.status}: rate limited.`);
     }
 
     if (!r.ok) {
-      throw new Error(
-        `Wikimedia HTTP ${r.status}: ${text.slice(0, 400)}`
-      );
+      throw new Error(`Wikimedia HTTP ${r.status}: ${text.slice(0, 400)}`);
     }
 
     const data = JSON.parse(text);
 
-    if (data?.error) {
-      throw new Error(JSON.stringify(data.error));
-    }
+    if (data?.error) throw new Error(JSON.stringify(data.error));
 
     return data;
   };
 
   const request = commonsQueue.then(run, run);
-
   commonsQueue = request.catch(() => {});
 
   return request;
 }
 
-async function searchCommonsVideos(query, maxResults = 10) {
+async function searchCommonsVideos(query, maxResults = 6) {
   const params = new URLSearchParams({
     action: "query",
     list: "search",
     srsearch: query,
     srnamespace: "6",
-    srlimit: String(Math.min(maxResults, 10)),
+    srlimit: String(Math.min(maxResults, 6)),
     srwhat: "text",
     format: "json",
     formatversion: "2"
@@ -758,7 +860,7 @@ async function searchCommonsVideos(query, maxResults = 10) {
       !isVideo ||
       !Number.isFinite(size) ||
       size <= 0 ||
-      size > 80 * 1024 * 1024
+      size > 60 * 1024 * 1024
     ) {
       return null;
     }
@@ -772,8 +874,6 @@ async function searchCommonsVideos(query, maxResults = 10) {
   }).filter(Boolean);
 }
 
-// Önceden loglarda görülen, doğrudan indirilebilir yedek video.
-// Wikimedia araması engellendiğinde kullanılabilir.
 const FALLBACK_VIDEO = {
   url: "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ocean_surface_waves_02.ogv",
   mime: "video/ogg",
@@ -787,264 +887,244 @@ app.post("/prepare-video", async (req, res) => {
   let tempDir = null;
 
   try {
-    console.log("NOVA PREPARE VIDEO REQUEST STARTED");
-    console.log("Request body fields:", Object.keys(req.body || {}));
+    await runHeavyJob(async () => {
+      console.log("NOVA PREPARE VIDEO REQUEST STARTED");
 
-    const lyrics = typeof req.body?.lyrics === "string"
-      ? req.body.lyrics.trim() : "";
+      const lyrics = typeof req.body?.lyrics === "string"
+        ? req.body.lyrics.trim()
+        : "";
 
-    const style = typeof req.body?.style === "string"
-      ? req.body.style.trim() : "Sinematik";
+      const style = typeof req.body?.style === "string"
+        ? req.body.style.trim()
+        : "Sinematik";
 
-    const visual = typeof req.body?.visualDescription === "string"
-      ? req.body.visualDescription.trim() : "";
+      const visual = typeof req.body?.visualDescription === "string"
+        ? req.body.visualDescription.trim()
+        : "";
 
-    const n = Number(req.body?.duration ?? 30);
-    const duration = Math.max(
-      1,
-      Math.min(180, Number.isFinite(n) && n > 0 ? n : 30)
-    );
-
-    const orientation = ["9:16", "16:9", "1:1"].includes(req.body?.orientation)
-      ? req.body.orientation : "9:16";
-
-    if (!lyrics) {
-      return res.status(400).json({
-        ok: false,
-        error: "Şarkı sözleri gerekli."
-      });
-    }
-
-    const styleMap = {
-      "Sinematik": ["cinematic landscape", "film landscape"],
-      "Duygusal": ["sunset landscape", "ocean sunset"],
-      "Enerjik": ["dance festival", "city lights"],
-      "Romantik": ["romantic sunset", "couple nature"],
-      "Karanlık": ["dark dramatic", "storm clouds"],
-      "Neon": ["neon city", "night city"],
-      "Doğa": ["nature landscape", "mountains forest"],
-      "Konser": ["live concert", "concert crowd"]
-    };
-
-    const cleanQuery = value => String(value || "")
-      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 70);
-
-    const keywords = styleMap[style] ||
-      [cleanQuery(style) || "cinematic landscape"];
-
-    // Her video isteğinde yalnızca bir arama sorgusu kullanılır.
-    // Gereksiz sorgular Wikimedia'nın HTTP 429 sınırını tetikleyebilir.
-    const firstQuery = cleanQuery(visual) || cleanQuery(keywords[0]);
-
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "nova-video-"));
-
-    let sources = [];
-
-    try {
-      console.log("WIKIMEDIA ARAMA:", firstQuery);
-
-      sources = await searchCommonsVideos(firstQuery, 10);
-
-      console.log(
-        "WIKIMEDIA ARAMA SONUÇ SAYISI:",
-        firstQuery,
-        sources.length
+      // Varsayılan test süresi 10 saniye.
+      const n = Number(req.body?.duration ?? 10);
+      const duration = Math.max(
+        1,
+        Math.min(180, Number.isFinite(n) && n > 0 ? n : 10)
       );
-    } catch (e) {
-      console.error("WIKIMEDIA ARAMA HATASI:", errorMessage(e));
-    }
 
-    // Arama sonuç vermezse bilinen doğrudan video kaynağını dene.
-    if (!sources.length) {
-      console.log("WIKIMEDIA YEDEK VIDEO KAYNAĞI KULLANILACAK");
-      sources = [FALLBACK_VIDEO];
-    }
+      const orientation = ["9:16", "16:9", "1:1"].includes(req.body?.orientation)
+        ? req.body.orientation
+        : "9:16";
 
-    console.log(
-      "VIDEO KAYNAKLARI HAZIR. KAYNAK SAYISI:",
-      sources.length
-    );
+      if (!lyrics) {
+        res.status(400).json({
+          ok: false,
+          error: "Şarkı sözleri gerekli."
+        });
+        return;
+      }
 
-    let width = 720;
-    let height = 1280;
+      const styleMap = {
+        "Sinematik": "cinematic landscape",
+        "Duygusal": "sunset landscape",
+        "Enerjik": "dance festival",
+        "Romantik": "romantic sunset",
+        "Karanlık": "dark dramatic",
+        "Neon": "neon city",
+        "Doğa": "nature landscape",
+        "Konser": "live concert"
+      };
 
-    if (orientation === "16:9") {
-      width = 1280;
-      height = 720;
-    }
+      const cleanQuery = value => String(value || "")
+        .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 70);
 
-    if (orientation === "1:1") {
-      width = 720;
-      height = 720;
-    }
+      const query = cleanQuery(visual) ||
+        styleMap[style] ||
+        "cinematic landscape";
 
-    const filter =
-      `scale=${width}:${height}:force_original_aspect_ratio=increase,` +
-      `crop=${width}:${height},setsar=1`;
+      tempDir = makeTempDir("nova-video-");
 
-    const segments = [];
-    let remaining = duration;
-
-    // Kaynak sayısı süreyi karşılamazsa mevcut kaynaklar tekrar kullanılır.
-    const maxSegments = Math.ceil(duration / 10) + sources.length;
-
-    for (
-      let i = 0;
-      i < maxSegments && remaining > 0.01;
-      i++
-    ) {
-      const source = sources[i % sources.length];
-      const segmentDuration = Math.min(10, remaining);
-
-      const inputFile = path.join(tempDir, `source-${i}.video`);
-      const segmentFile = path.join(tempDir, `segment-${i}.mp4`);
+      let sources = [];
 
       try {
-        console.log("VIDEO İNDİRİLİYOR:", source.title, source.url);
-
-        const r = await fetch(source.url, {
-          headers: {
-            "User-Agent": "NOVA-Music-Video/1.0"
-          },
-          signal: AbortSignal.timeout(60000)
-        });
-
-        if (!r.ok) {
-          throw new Error(`Video download HTTP ${r.status}`);
-        }
-
-        const contentType = r.headers.get("content-type") || "";
-
-        if (/text\/html|application\/json/i.test(contentType)) {
-          throw new Error("Kaynak video yerine HTML veya JSON döndü.");
-        }
-
-        const buffer = Buffer.from(await r.arrayBuffer());
-
-        if (!buffer.length || buffer.length > 80 * 1024 * 1024) {
-          throw new Error("Kaynak video boş veya 80 MB sınırını aşıyor.");
-        }
-
-        const mp4 = buffer.length >= 12 &&
-          buffer.subarray(4, 8).toString("ascii") === "ftyp";
-
-        const webm = buffer.length >= 4 &&
-          buffer.subarray(0, 4).equals(
-            Buffer.from([0x1a, 0x45, 0xdf, 0xa3])
-          );
-
-        const ogg = buffer.subarray(0, 4).toString("ascii") === "OggS";
-
-        if (!mp4 && !webm && !ogg) {
-          throw new Error("İndirilen kaynak geçerli bir video dosyası değil.");
-        }
-
-        fs.writeFileSync(inputFile, buffer);
-
-        await execFileAsync("ffmpeg", [
-          "-y",
-          "-stream_loop", "-1",
-          "-i", inputFile,
-          "-t", String(segmentDuration),
-          "-vf", filter,
-          "-r", "24",
-          "-an",
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-crf", "28",
-          "-pix_fmt", "yuv420p",
-          "-movflags", "+faststart",
-          segmentFile
-        ], {
-          timeout: 180000,
-          maxBuffer: 20 * 1024 * 1024
-        });
-
-        if (
-          !fs.existsSync(segmentFile) ||
-          fs.statSync(segmentFile).size === 0
-        ) {
-          throw new Error("FFmpeg boş video segmenti oluşturdu.");
-        }
-
-        segments.push(segmentFile);
-        remaining -= segmentDuration;
-
-        console.log("VIDEO SEGMENT HAZIR:", i, segmentDuration);
+        console.log("WIKIMEDIA ARAMA:", query);
+        sources = await searchCommonsVideos(query, 6);
+        console.log("WIKIMEDIA ARAMA SONUÇ SAYISI:", sources.length);
       } catch (e) {
-        console.error(
-          "VIDEO SEGMENT HATASI:",
-          source.title,
-          errorMessage(e)
+        console.error("WIKIMEDIA ARAMA HATASI:", errorMessage(e));
+      }
+
+      if (!sources.length) {
+        console.log("WIKIMEDIA YEDEK VIDEO KAYNAĞI KULLANILACAK");
+        sources = [FALLBACK_VIDEO];
+      }
+
+      console.log(
+        "VIDEO KAYNAKLARI HAZIR. KAYNAK SAYISI:",
+        sources.length
+      );
+
+      let width = 480;
+      let height = 854;
+
+      if (orientation === "16:9") {
+        width = 854;
+        height = 480;
+      }
+
+      if (orientation === "1:1") {
+        width = 480;
+        height = 480;
+      }
+
+      const filter =
+        `scale=${width}:${height}:force_original_aspect_ratio=increase,` +
+        `crop=${width}:${height},setsar=1`;
+
+      const segments = [];
+      let remaining = duration;
+
+      // Her parça en fazla 5 saniye; tek tek işlenir.
+      const maxSegments = Math.ceil(duration / 5) + sources.length;
+
+      for (
+        let i = 0;
+        i < maxSegments && remaining > 0.01;
+        i++
+      ) {
+        const source = sources[i % sources.length];
+        const segDuration = Math.min(5, remaining);
+        const inputFile = path.join(tempDir, `source-${i}.video`);
+        const segmentFile = path.join(tempDir, `segment-${i}.mp4`);
+
+        try {
+          console.log("VIDEO İNDİRİLİYOR:", source.title, source.url);
+
+          await downloadToFile(source.url, inputFile, {
+            timeout: 60000,
+            maxBytes: 60 * 1024 * 1024
+          });
+
+          await execFileAsync("ffmpeg", [
+            "-y",
+            "-threads", "1",
+            "-stream_loop", "-1",
+            "-i", inputFile,
+            "-t", String(segDuration),
+            "-vf", filter,
+            "-r", "18",
+            "-an",
+            "-c:v", "libx264",
+            "-threads", "1",
+            "-preset", "ultrafast",
+            "-crf", "31",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            segmentFile
+          ], {
+            timeout: 120000,
+            maxBuffer: 3 * 1024 * 1024
+          });
+
+          if (
+            !fs.existsSync(segmentFile) ||
+            !fs.statSync(segmentFile).size
+          ) {
+            throw new Error("FFmpeg boş video parçası oluşturdu.");
+          }
+
+          segments.push(segmentFile);
+          remaining -= segDuration;
+
+          console.log("VIDEO SEGMENT HAZIR:", i, segDuration);
+        } catch (e) {
+          console.error(
+            "VIDEO SEGMENT HATASI:",
+            source.title,
+            errorMessage(e)
+          );
+        } finally {
+          try {
+            if (fs.existsSync(inputFile)) {
+              fs.rmSync(inputFile, { force: true });
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (!segments.length || remaining > 0.01) {
+        throw new Error(
+          `İstenen video süresi tamamlanamadı. Kalan süre: ${remaining.toFixed(1)} saniye.`
         );
       }
-    }
 
-    if (!segments.length || remaining > 0.01) {
-      throw new Error(
-        `İstenen video süresi tamamlanamadı. Kalan süre: ${remaining.toFixed(1)} saniye.`
+      const outputFile = path.join(tempDir, "nova-video.mp4");
+
+      if (segments.length === 1) {
+        // Tek parça varsa ikinci FFmpeg işlemi yapılmaz.
+        fs.copyFileSync(segments[0], outputFile);
+      } else {
+        const concatFile = path.join(tempDir, "concat.txt");
+
+        fs.writeFileSync(
+          concatFile,
+          segments.map(file => `file '${file.replace(/'/g, "'\\''")}'`).join("\n"),
+          "utf8"
+        );
+
+        // Parçalar aynı kodlamayı kullandığı için yeniden kodlamadan birleştir.
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-threads", "1",
+          "-f", "concat",
+          "-safe", "0",
+          "-i", concatFile,
+          "-t", String(duration),
+          "-c", "copy",
+          "-movflags", "+faststart",
+          outputFile
+        ], {
+          timeout: 120000,
+          maxBuffer: 3 * 1024 * 1024
+        });
+      }
+
+      if (
+        !fs.existsSync(outputFile) ||
+        !fs.statSync(outputFile).size
+      ) {
+        throw new Error("FFmpeg son MP4 dosyasını oluşturamadı.");
+      }
+
+      const fd = fs.openSync(outputFile, "r");
+      const header = Buffer.alloc(12);
+
+      try {
+        fs.readSync(fd, header, 0, 12, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+
+      if (
+        fs.statSync(outputFile).size < 12 ||
+        header.subarray(4, 8).toString("ascii") !== "ftyp"
+      ) {
+        throw new Error("Oluşturulan çıktı geçerli bir MP4 dosyası değil.");
+      }
+
+      console.log(
+        "NOVA MP4 HAZIR:",
+        fs.statSync(outputFile).size,
+        "bayt"
       );
-    }
 
-    const concatFile = path.join(tempDir, "concat.txt");
-    const outputFile = path.join(tempDir, "nova-video.mp4");
-
-    fs.writeFileSync(
-      concatFile,
-      segments.map(file =>
-        `file '${file.replace(/'/g, "'\\''")}'`
-      ).join("\n"),
-      "utf8"
-    );
-
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", concatFile,
-      "-t", String(duration),
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "28",
-      "-pix_fmt", "yuv420p",
-      "-an",
-      "-movflags", "+faststart",
-      outputFile
-    ], {
-      timeout: 240000,
-      maxBuffer: 20 * 1024 * 1024
+      await sendFileStream(
+        res,
+        outputFile,
+        "video/mp4",
+        "nova-video.mp4"
+      );
     });
-
-    if (
-      !fs.existsSync(outputFile) ||
-      fs.statSync(outputFile).size === 0
-    ) {
-      throw new Error("FFmpeg son MP4 dosyasını oluşturamadı.");
-    }
-
-    const outputBuffer = fs.readFileSync(outputFile);
-
-    if (
-      outputBuffer.length < 12 ||
-      outputBuffer.subarray(4, 8).toString("ascii") !== "ftyp"
-    ) {
-      throw new Error("Oluşturulan çıktı geçerli bir MP4 dosyası değil.");
-    }
-
-    console.log("NOVA MP4 HAZIR:", outputBuffer.length, "bayt");
-
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader(
-      "Content-Disposition",
-      'inline; filename="nova-video.mp4"'
-    );
-    res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Content-Length", String(outputBuffer.length));
-
-    return res.send(outputBuffer);
   } catch (e) {
     console.error("PREPARE VIDEO ERROR:", e?.stack || e);
 
@@ -1054,18 +1134,11 @@ app.post("/prepare-video", async (req, res) => {
         error: "NOVA video oluşturma hatası.",
         details: errorMessage(e)
       });
+    } else if (!res.writableEnded) {
+      res.destroy(e);
     }
   } finally {
-    try {
-      if (tempDir && fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.error(
-        "Video geçici dosyaları temizlenemedi:",
-        errorMessage(e)
-      );
-    }
+    removeTempDir(tempDir);
   }
 });
 
