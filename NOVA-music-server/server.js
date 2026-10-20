@@ -1248,6 +1248,13 @@ async function searchCommonsVideosWithFallback(style, visual) {
 
 /* Okyanus videosu gibi alakasız sabit yedek kaldırıldı. */
 
+const FALLBACK_VIDEO = {
+  url: "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ocean_surface_waves_02.ogv",
+  mime: "video/ogg",
+  size: 0,
+  title: "Ocean surface waves 02.ogv"
+};
+
 // ==================== PREPARE VIDEO ====================
 
 app.post("/prepare-video", async (req, res) => {
