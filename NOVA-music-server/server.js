@@ -1021,7 +1021,8 @@ app.post("/merge-video-audio", async (req, res) => {
   }
 });
 
-// ==================== WIKIMEDIA SEARCH ====================
+
+/* ==================== WIKIMEDIA SEARCH ==================== */
 
 let lastCommonsRequestAt = 0;
 let commonsQueue = Promise.resolve();
@@ -1038,7 +1039,7 @@ async function commonsFetch(url) {
 
     const r = await fetch(url, {
       headers: {
-        "User-Agent": "NOVA-Music-Video/1.0",
+        "User-Agent": "NOVA-Music-Video/1.0 (video creator)",
         Accept: "application/json"
       },
       signal: AbortSignal.timeout(25000)
@@ -1058,7 +1059,10 @@ async function commonsFetch(url) {
 
     const data = JSON.parse(text);
 
-    if (data?.error) throw new Error(JSON.stringify(data.error));
+    if (data?.error) {
+      throw new Error(JSON.stringify(data.error));
+    }
+
     return data;
   };
 
@@ -1073,18 +1077,19 @@ async function searchCommonsVideos(query, maxResults = 6) {
     list: "search",
     srsearch: query,
     srnamespace: "6",
-    srlimit: String(Math.min(maxResults, 6)),
+    srlimit: String(Math.min(maxResults, 10)),
     srwhat: "text",
     format: "json",
     formatversion: "2"
   });
 
   const search = await commonsFetch(
-    "https://commons.wikimedia.org/w/api.php?" + params.toString()
+    "https://commons.wikimedia.org/w/api.php?" +
+    params.toString()
   );
 
   const ids = (search?.query?.search || [])
-    .map(x => Number(x.pageid))
+    .map(item => Number(item.pageid))
     .filter(Number.isFinite);
 
   if (!ids.length) return [];
@@ -1099,21 +1104,25 @@ async function searchCommonsVideos(query, maxResults = 6) {
   });
 
   const info = await commonsFetch(
-    "https://commons.wikimedia.org/w/api.php?" + infoParams.toString()
+    "https://commons.wikimedia.org/w/api.php?" +
+    infoParams.toString()
   );
 
   return (info?.query?.pages || [])
     .map(page => {
-      const i = page?.imageinfo?.[0];
-      if (!i?.url) return null;
+      const image = page?.imageinfo?.[0];
+      if (!image?.url) return null;
+
+      const title = page.title || "";
+      const url = image.url;
+      const mime = image.mime || "";
+      const size = Number(image.size);
 
       const isVideo =
-        i.mediatype === "VIDEO" ||
-        /^video\//i.test(i.mime || "") ||
-        /\.(mp4|webm|ogv|mov|m4v)(?:$|[?#])/i.test(i.url) ||
-        /\.(mp4|webm|ogv|mov|m4v)$/i.test(page.title || "");
-
-      const size = Number(i.size);
+        image.mediatype === "VIDEO" ||
+        /^video\//i.test(mime) ||
+        /\.(mp4|webm|ogv|mov|m4v)(?:$|[?#])/i.test(url) ||
+        /\.(mp4|webm|ogv|mov|m4v)$/i.test(title);
 
       if (
         !isVideo ||
@@ -1125,21 +1134,119 @@ async function searchCommonsVideos(query, maxResults = 6) {
       }
 
       return {
-        url: i.url,
-        mime: i.mime || "",
+        url,
+        mime,
         size,
-        title: page.title || ""
+        title
       };
     })
     .filter(Boolean);
 }
 
-const FALLBACK_VIDEO = {
-  url: "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ocean_surface_waves_02.ogv",
-  mime: "video/ogg",
-  size: 0,
-  title: "Ocean surface waves 02.ogv"
-};
+function buildVideoSearchQueries(style, visual) {
+  const clean = value =>
+    String(value || "")
+      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 65);
+
+  const styleQueries = {
+    "Sinematik": [
+      "cinematic landscape video",
+      "cinematic city video",
+      "dramatic landscape video"
+    ],
+    "Duygusal": [
+      "sunset landscape video",
+      "rain window video",
+      "emotional cinematic video"
+    ],
+    "Enerjik": [
+      "dance festival video",
+      "dance performance video",
+      "night city lights video"
+    ],
+    "Romantik": [
+      "romantic sunset video",
+      "couple walking sunset video",
+      "flowers close up video"
+    ],
+    "Karanlık": [
+      "dark city night video",
+      "storm clouds video",
+      "dark cinematic video"
+    ],
+    "Neon": [
+      "neon city night video",
+      "Tokyo street night video",
+      "neon lights video"
+    ],
+    "Doğa": [
+      "forest nature video",
+      "mountain landscape video",
+      "waterfall nature video"
+    ],
+    "Konser": [
+      "live concert stage video",
+      "concert crowd lights video",
+      "musician performing stage video"
+    ]
+  };
+
+  const queries = [];
+  const visualQuery = clean(visual);
+
+  if (visualQuery) {
+    queries.push(`${visualQuery} video`);
+    queries.push(`${visualQuery} footage`);
+  }
+
+  for (const item of styleQueries[style] || styleQueries["Sinematik"]) {
+    queries.push(item);
+  }
+
+  queries.push(
+    "cinematic city lights video",
+    "mountain landscape video",
+    "forest aerial video"
+  );
+
+  return [...new Set(queries)].slice(0, 8);
+}
+
+async function searchCommonsVideosWithFallback(style, visual) {
+  const queries = buildVideoSearchQueries(style, visual);
+
+  for (const query of queries) {
+    try {
+      console.log("WIKIMEDIA ARAMA:", query);
+
+      const results = await searchCommonsVideos(query, 6);
+
+      console.log(
+        "WIKIMEDIA SONUÇ:",
+        query,
+        "adet =",
+        results.length
+      );
+
+      if (results.length) {
+        return results;
+      }
+    } catch (e) {
+      console.error(
+        "WIKIMEDIA SORGU HATASI:",
+        query,
+        errorMessage(e)
+      );
+    }
+  }
+
+  return [];
+}
+
+/* Okyanus videosu gibi alakasız sabit yedek kaldırıldı. */
 
 // ==================== PREPARE VIDEO ====================
 
