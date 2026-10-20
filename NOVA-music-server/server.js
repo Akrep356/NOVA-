@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
@@ -95,18 +96,33 @@ async function downloadToFile(url, filePath, options = {}) {
   return size;
 }
 
-// İstemci bağlantısı kapanmışsa sunucunun çökmesini önle.
+// Dosyanın gönderim durumunu ayrıntılı kaydet.
 async function sendFileStream(res, filePath, contentType, filename) {
   if (
     res.destroyed ||
     res.writableEnded ||
     res.socket?.destroyed
   ) {
-    console.log("CLIENT DISCONNECTED BEFORE FILE SEND:", filename);
+    console.error(
+      "CLIENT DISCONNECTED BEFORE FILE SEND:",
+      filename,
+      "headersSent =", res.headersSent,
+      "writableEnded =", res.writableEnded,
+      "destroyed =", res.destroyed,
+      "socketDestroyed =", Boolean(res.socket?.destroyed)
+    );
     return false;
   }
 
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Gönderilecek dosya bulunamadı: ${filename}`);
+  }
+
   const stat = fs.statSync(filePath);
+
+  if (!stat.isFile() || stat.size === 0) {
+    throw new Error(`Gönderilecek dosya boş veya geçersiz: ${filename}`);
+  }
 
   res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Length", String(stat.size));
@@ -115,31 +131,39 @@ async function sendFileStream(res, filePath, contentType, filename) {
     `inline; filename="${filename}"`
   );
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+
+  console.log("FILE SEND START:", filename);
+  console.log("FILE SEND SIZE:", stat.size, "bytes");
+  console.log("FILE SEND CONTENT TYPE:", contentType);
 
   const source = fs.createReadStream(filePath);
 
-  // pipeline reddedilse bile geç gelen open/read hatası işlenir.
   source.on("error", e => {
-    console.error("FILE STREAM ERROR:", errorMessage(e));
+    console.error("FILE STREAM SOURCE ERROR:", errorMessage(e));
   });
 
   try {
     await pipeline(source, res);
+
+    console.log("FILE SEND COMPLETE:", filename);
     return true;
   } catch (e) {
-    if (
+    const disconnected =
       res.destroyed ||
       res.socket?.destroyed ||
       e.code === "ERR_STREAM_PREMATURE_CLOSE" ||
       e.code === "ERR_STREAM_DESTROYED" ||
       e.code === "ERR_STREAM_UNABLE_TO_PIPE" ||
       e.code === "ECONNRESET" ||
-      e.code === "EPIPE"
-    ) {
-      console.log(
+      e.code === "EPIPE";
+
+    if (disconnected) {
+      console.error(
         "CLIENT DISCONNECTED DURING FILE SEND:",
         filename,
-        errorMessage(e)
+        "code =", e.code || "unknown",
+        "message =", errorMessage(e)
       );
       return false;
     }
@@ -190,9 +214,13 @@ app.get("/wan-api-test", async (_req, res) => {
     console.log("WAN API INFO STATUS:", r.status);
     console.log("WAN API INFO:", text.slice(0, 12000));
 
-    res.status(r.status).type("application/json").send(text);
+    if (!res.destroyed && !res.writableEnded) {
+      res.status(r.status).type("application/json").send(text);
+    }
   } catch (e) {
-    if (!res.headersSent) {
+    console.error("WAN API TEST ERROR:", errorMessage(e));
+
+    if (!res.headersSent && !res.destroyed) {
       res.status(500).json({
         ok: false,
         error: errorMessage(e)
@@ -717,10 +745,6 @@ app.post("/wan-video", async (req, res) => {
           }
         };
 
-        // API /gradio_api/info içindeki gerçek parametre sırası:
-        // image, prompt, steps, negative_prompt, duration_seconds,
-        // flow_shift, guidance_scale, guidance_scale_2, seed,
-        // randomize_seed.
         const payload = {
           data: [
             imageFileData,
@@ -840,12 +864,14 @@ app.post("/wan-video", async (req, res) => {
 
         console.log("WAN VIDEO DOWNLOADED:", stat.size, "bytes");
 
-        await sendFileStream(
+        const sent = await sendFileStream(
           res,
           output,
           "video/mp4",
           "nova-wan-video.mp4"
         );
+
+        console.log("WAN VIDEO SENT TO CLIENT:", sent);
       } finally {
         if (imageBuffer.length) imageBuffer.fill(0);
       }
@@ -968,12 +994,14 @@ app.post("/merge-video-audio", async (req, res) => {
         throw new Error("FFmpeg output video was not created.");
       }
 
-      await sendFileStream(
+      const sent = await sendFileStream(
         res,
         output,
         "video/mp4",
         "nova-music-video.mp4"
       );
+
+      console.log("MERGED VIDEO SENT TO CLIENT:", sent);
     });
   } catch (e) {
     console.error(
@@ -1121,6 +1149,7 @@ app.post("/prepare-video", async (req, res) => {
   try {
     await runHeavyJob(async () => {
       console.log("NOVA PREPARE VIDEO REQUEST STARTED");
+      console.log("REQUEST CONTENT LENGTH:", req.headers["content-length"] || "unknown");
 
       const lyrics = typeof req.body?.lyrics === "string"
         ? req.body.lyrics.trim()
@@ -1328,18 +1357,18 @@ app.post("/prepare-video", async (req, res) => {
         throw new Error("Oluşturulan dosya geçerli MP4 değil.");
       }
 
-      console.log(
-        "NOVA MP4 HAZIR:",
-        fs.statSync(outputFile).size,
-        "bayt"
-      );
+      const outputSize = fs.statSync(outputFile).size;
 
-      await sendFileStream(
+      console.log("NOVA MP4 HAZIR:", outputSize, "bayt");
+
+      const sent = await sendFileStream(
         res,
         outputFile,
         "video/mp4",
         "nova-video.mp4"
       );
+
+      console.log("PREPARE VIDEO SENT TO CLIENT:", sent);
     });
   } catch (e) {
     console.error("PREPARE VIDEO ERROR:", e?.stack || errorMessage(e));
